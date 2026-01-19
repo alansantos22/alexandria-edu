@@ -2,7 +2,10 @@
   <div class="container">
     <div class="header">
       <h1>Mentorship Home</h1>
-      <button @click="logout">Logout</button>
+      <div>
+        <button @click="$router.push('/library')" class="nav-btn">Library</button>
+        <button @click="logout" class="nav-btn logout">Logout</button>
+      </div>
     </div>
 
     <div v-if="liveLink" class="live-card">
@@ -66,4 +69,6 @@ const logout = () => {
 .live-card { background: #e0f7fa; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center; }
 .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
 .lesson-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 5px; }
+.nav-btn { padding: 8px 16px; margin-left: 10px; cursor: pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
+.logout { background: #ffcccc; border-color: #ffaaaa; }
 </style>

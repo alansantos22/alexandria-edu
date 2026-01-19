@@ -25,5 +25,13 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS library (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Insert initial data for settings (example)
 INSERT INTO settings (key_name, value) VALUES ('live_meeting_url', '') ON DUPLICATE KEY UPDATE value=value;
