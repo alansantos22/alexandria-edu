@@ -6,6 +6,7 @@ import Home from '../views/Home.vue'
 import LessonPlayer from '../views/LessonPlayer.vue'
 import Admin from '../views/Admin.vue'
 import Library from '../views/Library.vue'
+import Calendar from '../views/Calendar.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -14,7 +15,8 @@ const routes = [
   { path: '/home', component: Home, meta: { requiresAuth: true } },
   { path: '/lesson/:id', component: LessonPlayer, meta: { requiresAuth: true } },
   { path: '/admin', component: Admin, meta: { requiresAuth: true, requiresAdmin: true } },
-  { path: '/library', component: Library, meta: { requiresAuth: true } }
+  { path: '/library', component: Library, meta: { requiresAuth: true } },
+  { path: '/calendar', component: Calendar, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({
@@ -36,8 +38,8 @@ router.beforeEach((to, from, next) => {
       return
     }
 
-    // If the route is home or lesson or library, check if active
-    if ((to.path === '/home' || to.path === '/library' || to.path.startsWith('/lesson/')) && user.is_active != 1 && user.role !== 'admin') {
+    // If the route is home or lesson or library or calendar, check if active
+    if ((to.path === '/home' || to.path === '/library' || to.path === '/calendar' || to.path.startsWith('/lesson/')) && user.is_active != 1 && user.role !== 'admin') {
       next('/checkout')
     } else {
         next()

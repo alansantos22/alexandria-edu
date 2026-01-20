@@ -3,6 +3,7 @@
     <div class="header">
       <h1>Mentorship Home</h1>
       <div>
+        <button @click="$router.push('/calendar')" class="nav-btn">Calendar</button>
         <button @click="$router.push('/library')" class="nav-btn">Library</button>
         <button @click="logout" class="nav-btn logout">Logout</button>
       </div>

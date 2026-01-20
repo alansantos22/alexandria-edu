@@ -33,5 +33,19 @@ CREATE TABLE IF NOT EXISTS library (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert initial data for settings (example)
+CREATE TABLE IF NOT EXISTS events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    event_start DATETIME NOT NULL,
+    event_end DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert initial data
 INSERT INTO settings (key_name, value) VALUES ('live_meeting_url', '') ON DUPLICATE KEY UPDATE value=value;
+
+-- Insert sample events
+INSERT INTO events (title, description, event_start, event_end) VALUES
+('Monthly Mentorship Q&A', 'Live Q&A session with mentors.', DATE_ADD(NOW(), INTERVAL 2 DAY), DATE_ADD(NOW(), INTERVAL 2 DAY + INTERVAL 1 HOUR)),
+('Vue.js Workshop', 'Deep dive into Composition API.', DATE_ADD(NOW(), INTERVAL 5 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY + INTERVAL 2 HOUR));

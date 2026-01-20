@@ -23,6 +23,11 @@ let library = [
     { id: 2, title: 'The Pragmatic Programmer', file_path: '#', created_at: '2023-01-20 14:30:00' }
 ];
 
+let events = [
+    { id: 1, title: 'Monthly Mentorship Q&A', description: 'Live Q&A session with mentors.', event_start: new Date(Date.now() + 86400000 * 2).toISOString(), event_end: new Date(Date.now() + 86400000 * 2 + 3600000).toISOString() },
+    { id: 2, title: 'Vue.js Workshop', description: 'Deep dive into Composition API.', event_start: new Date(Date.now() + 86400000 * 5).toISOString(), event_end: new Date(Date.now() + 86400000 * 5 + 7200000).toISOString() }
+];
+
 let settings = {
     live_meeting_url: 'https://meet.google.com/mock-meeting-id'
 };
@@ -69,6 +74,9 @@ mock.onGet('/get_live_link.php').reply(200, { url: settings.live_meeting_url });
 
 // Get Library
 mock.onGet(/\/get_library\.php/).reply(200, library);
+
+// Get Events
+mock.onGet(/\/get_events\.php/).reply(200, events);
 
 // Admin: Update Link
 mock.onPost('/update_link.php').reply(config => {
