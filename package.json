@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "lucide-vue-next": "^1.0.0",
+    "sass": "^1.99.0"
+  }
+}

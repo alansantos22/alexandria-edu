@@ -1,0 +1,111 @@
+// =============================================================================
+// COLORS · Alexandria EDU
+// Paleta moderna para uma plataforma de IA, Automação, Gamificação e Web3.
+// Inspiração: aurora boreal + dark glassmorphism + acentos neon controlados.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. Brand · cores principais
+// -----------------------------------------------------------------------------
+$brand-primary:        #6C5CE7; // Roxo elétrico (IA / Web3)
+$brand-primary-soft:   #8E7DF0;
+$brand-primary-deep:   #4B3FBA;
+
+$brand-secondary:      #00D9C0; // Verde água (Automação)
+$brand-secondary-soft: #4DEAD7;
+$brand-secondary-deep: #00A68F;
+
+$brand-accent:         #FF6B9D; // Rosa/Magenta (Gamificação)
+$brand-accent-soft:    #FF95B8;
+$brand-accent-deep:    #D14B7C;
+
+$brand-gold:           #FFD166; // XP / conquistas
+$brand-cyber:          #29E0FF; // Web3 highlight
+
+// -----------------------------------------------------------------------------
+// 2. Neutros · base do tema escuro (default)
+// -----------------------------------------------------------------------------
+$neutral-0:    #FFFFFF;
+$neutral-50:   #F7F8FB;
+$neutral-100:  #EEF0F6;
+$neutral-200:  #D9DDE8;
+$neutral-300:  #B5BBD0;
+$neutral-400:  #8A91AC;
+$neutral-500:  #5D6480;
+$neutral-600:  #3F4660;
+$neutral-700:  #272C44;
+$neutral-800:  #181C30;
+$neutral-900:  #0E1124;
+$neutral-950:  #07091A;
+
+// -----------------------------------------------------------------------------
+// 3. Estados semânticos
+// -----------------------------------------------------------------------------
+$state-success: #2ECC71;
+$state-warning: #F5A623;
+$state-error:   #FF4D6D;
+$state-info:    #4DA3FF;
+
+// -----------------------------------------------------------------------------
+// 4. Gradientes (usados em hero, liquid buttons e BENTO cards)
+// -----------------------------------------------------------------------------
+$gradient-aurora:   linear-gradient(135deg, #6C5CE7 0%, #00D9C0 50%, #FF6B9D 100%);
+$gradient-violet:   linear-gradient(135deg, #6C5CE7 0%, #4B3FBA 100%);
+$gradient-mint:     linear-gradient(135deg, #00D9C0 0%, #29E0FF 100%);
+$gradient-sunset:   linear-gradient(135deg, #FF6B9D 0%, #FFD166 100%);
+$gradient-night:    linear-gradient(160deg, #0E1124 0%, #181C30 60%, #272C44 100%);
+$gradient-glass:    linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 100%);
+$gradient-vista:    linear-gradient(180deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.10) 48%, rgba(255,255,255,0.00) 50%, rgba(0,0,0,0.10) 100%);
+
+// -----------------------------------------------------------------------------
+// 5. CSS Custom Properties · permite theming runtime
+// -----------------------------------------------------------------------------
+:root {
+  // Brand
+  --color-primary:        #{$brand-primary};
+  --color-primary-soft:   #{$brand-primary-soft};
+  --color-primary-deep:   #{$brand-primary-deep};
+  --color-secondary:      #{$brand-secondary};
+  --color-secondary-soft: #{$brand-secondary-soft};
+  --color-secondary-deep: #{$brand-secondary-deep};
+  --color-accent:         #{$brand-accent};
+  --color-accent-soft:    #{$brand-accent-soft};
+  --color-accent-deep:    #{$brand-accent-deep};
+  --color-gold:           #{$brand-gold};
+  --color-cyber:          #{$brand-cyber};
+
+  // Neutros (dark first)
+  --bg-base:      #{$neutral-950};
+  --bg-surface:   #{$neutral-900};
+  --bg-elevated:  #{$neutral-800};
+  --bg-overlay:   rgba(14, 17, 36, 0.72);
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --text-primary:    #{$neutral-50};
+  --text-secondary:  #{$neutral-300};
+  --text-muted:      #{$neutral-400};
+  --text-inverse:    #{$neutral-900};
+
+  // Semântica
+  --color-success: #{$state-success};
+  --color-warning: #{$state-warning};
+  --color-error:   #{$state-error};
+  --color-info:    #{$state-info};
+
+  // Gradientes
+  --gradient-aurora: #{$gradient-aurora};
+  --gradient-violet: #{$gradient-violet};
+  --gradient-mint:   #{$gradient-mint};
+  --gradient-sunset: #{$gradient-sunset};
+  --gradient-night:  #{$gradient-night};
+  --gradient-glass:  #{$gradient-glass};
+  --gradient-vista:  #{$gradient-vista};
+
+  // Glassmorphism
+  --glass-bg:     rgba(255, 255, 255, 0.06);
+  --glass-bg-strong: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-blur:   18px;
+}

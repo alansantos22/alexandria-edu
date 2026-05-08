@@ -1,0 +1,99 @@
+// =============================================================================
+// FONTS · Alexandria EDU
+// Tipografia: Space Grotesk (display/tech) + Inter (UI) + JetBrains Mono (code)
+// =============================================================================
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+// -----------------------------------------------------------------------------
+// 1. Famílias
+// -----------------------------------------------------------------------------
+$font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+$font-body:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+$font-mono:    'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+// -----------------------------------------------------------------------------
+// 2. Escala tipográfica (modular · ratio 1.25 · base 16px)
+// -----------------------------------------------------------------------------
+$fs-xs:    0.75rem;   // 12px · captions
+$fs-sm:    0.875rem;  // 14px · helpers
+$fs-base:  1rem;      // 16px · body
+$fs-md:    1.125rem;  // 18px · large body
+$fs-lg:    1.375rem;  // 22px · subtitles
+$fs-xl:    1.75rem;   // 28px · h3
+$fs-2xl:   2.25rem;   // 36px · h2
+$fs-3xl:   3rem;      // 48px · h1
+$fs-4xl:   4rem;      // 64px · hero
+
+// -----------------------------------------------------------------------------
+// 3. Pesos · line-heights · letter-spacing
+// -----------------------------------------------------------------------------
+$fw-light:    300;
+$fw-regular:  400;
+$fw-medium:   500;
+$fw-semibold: 600;
+$fw-bold:     700;
+
+$lh-tight:   1.15;
+$lh-snug:    1.3;
+$lh-normal:  1.5;
+$lh-relaxed: 1.7;
+
+$ls-tight:   -0.02em;
+$ls-normal:  0;
+$ls-wide:    0.04em;
+$ls-wider:   0.12em;
+
+// -----------------------------------------------------------------------------
+// 4. Custom Properties
+// -----------------------------------------------------------------------------
+:root {
+  --font-display: #{$font-display};
+  --font-body:    #{$font-body};
+  --font-mono:    #{$font-mono};
+
+  --fs-xs:   #{$fs-xs};
+  --fs-sm:   #{$fs-sm};
+  --fs-base: #{$fs-base};
+  --fs-md:   #{$fs-md};
+  --fs-lg:   #{$fs-lg};
+  --fs-xl:   #{$fs-xl};
+  --fs-2xl:  #{$fs-2xl};
+  --fs-3xl:  #{$fs-3xl};
+  --fs-4xl:  #{$fs-4xl};
+}
+
+// -----------------------------------------------------------------------------
+// 5. Utility classes (opcionais · BEM-friendly: u-text--*)
+// -----------------------------------------------------------------------------
+.u-text--display {
+  font-family: $font-display;
+  font-weight: $fw-bold;
+  letter-spacing: $ls-tight;
+  line-height: $lh-tight;
+}
+
+.u-text--eyebrow {
+  font-family: $font-display;
+  font-size: $fs-xs;
+  font-weight: $fw-semibold;
+  letter-spacing: $ls-wider;
+  text-transform: uppercase;
+  color: var(--color-secondary);
+}
+
+.u-text--mono {
+  font-family: $font-mono;
+  font-size: $fs-sm;
+  letter-spacing: $ls-normal;
+}
+
+.u-text--gradient {
+  background: var(--gradient-aurora);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.u-text--muted   { color: var(--text-muted); }
+.u-text--subtle  { color: var(--text-secondary); }

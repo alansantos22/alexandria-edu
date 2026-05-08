@@ -21,20 +21,23 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const user = JSON.parse(localStorage.getItem('user'))
+  const token = localStorage.getItem('token')
+  const user = JSON.parse(localStorage.getItem('user') || 'null')
 
-  if (to.meta.requiresAuth && !user) {
+  if (to.meta.requiresAuth && (!token || !user)) {
     next('/')
-  } else if (to.meta.requiresAuth && user) {
-    // If the route is home or lesson, check if active
-    if ((to.path === '/home' || to.path.startsWith('/lesson/')) && user.is_active != 1 && user.role !== 'admin') {
-      next('/checkout')
-    } else {
-        next()
-    }
-  } else {
-    next()
+    return
   }
+
+  if (to.meta.requiresAuth && user) {
+    const needsActive = to.path === '/home' || to.path.startsWith('/lesson/')
+    if (needsActive && !user.isActive && user.role !== 'admin') {
+      next('/checkout')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

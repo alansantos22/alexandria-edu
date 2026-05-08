@@ -1,58 +1,121 @@
-# Alexandria - Mentorship MVP platform
+# Alexandria EDU — Mentorship Platform
 
-## Project Structure
+Plataforma de mentoria com aulas em vídeo + sessão ao vivo, agora rodando em VPS.
 
-*   `backend/`: Native PHP API (no frameworks).
-*   `frontend/`: Vue.js 3 + Vite.
-*   `database/`: SQL schema.
+## 🏗️ Stack
 
-## Setup Instructions
+| Camada    | Tecnologia                                       |
+| --------- | ------------------------------------------------ |
+| Backend   | NestJS 10 + Fastify + TypeScript + TypeORM       |
+| Database  | MySQL 8 (InnoDB / utf8mb4) com UUID              |
+| Auth      | JWT (HS256) + HMAC-SHA256 + Argon2id             |
+| Frontend  | Vue 3 + Vite + Vue Router 4 + Axios              |
 
-### 1. Database Setup
+## 📁 Estrutura
 
-1.  Ensure you have MySQL running.
-2.  Create a database named `alexandria_db`.
-3.  Import the schema from `database/schema.sql`.
-    *   Command line example: `mysql -u root -p < database/schema.sql` (Adjust user/pass as needed).
-    *   **Note:** The `backend/db.php` file is configured for `root` user with no password on `localhost`. Edit this file if your MySQL credentials differ.
+```
+backend/    # NestJS API (porta 3003, prefixo /api/v1)
+database/   # schema.sql
+frontend/   # Vue 3 + Vite (porta 5173)
+.github/    # patterns + tmp/todo.md
+```
 
-### 2. Backend Setup
+## 🚀 Setup
 
-1.  Navigate to the `backend/` directory.
-2.  Start the PHP built-in server on port 8000:
-    ```bash
-    cd backend
-    php -S localhost:8000
-    ```
+### 1. Database
 
-### 3. Frontend Setup
+```sh
+mysql -u root -p < database/schema.sql
+```
 
-1.  Navigate to the `frontend/` directory.
-2.  Install dependencies (if not already done):
-    ```bash
-    cd frontend
-    npm install
-    ```
-3.  Start the development server:
-    ```bash
-    npm run dev
-    ```
+### 2. Backend
 
-## Usage
+```sh
+cd backend
+cp .env.example .env   # edite credenciais e secrets
+npm install
+npm run start:dev      # http://localhost:3003/api/v1
+```
 
-1.  Open the frontend URL (usually `http://localhost:5173`).
-2.  **Register** a new account.
-    *   By default, new accounts have `is_active = 0` (inactive) and `role = 'student'`.
-    *   You will be redirected to the `/checkout` page upon login if inactive.
-3.  **Activate User (Manual Step for Testing)**:
-    *   Go to your database and update the `users` table:
-        ```sql
-        UPDATE users SET is_active = 1 WHERE email = 'your@email.com';
-        ```
-    *   Now login again to access the `/home` dashboard.
-4.  **Admin Access**:
-    *   To access the Admin panel, manually set a user's role to 'admin' in the database:
-        ```sql
-        UPDATE users SET role = 'admin', is_active = 1 WHERE email = 'admin@email.com';
-        ```
-    *   Login and you will be redirected to `/admin` (or navigate there manually).
+Variáveis principais (`.env`):
+
+```env
+PORT=3003
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=alexandria_db
+JWT_SECRET=...
+HMAC_SECRET=...
+CORS_ORIGIN=http://localhost:5173
+```
+
+### 3. Frontend
+
+```sh
+cd frontend
+npm install
+npm run dev            # http://localhost:5173
+```
+
+`.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:3003/api/v1
+```
+
+## 🔐 Endpoints
+
+| Método | Rota                      | Auth         | Descrição                       |
+| ------ | ------------------------- | ------------ | ------------------------------- |
+| POST   | `/auth/register`          | Pública      | Cadastro de aluno (inativo)     |
+| POST   | `/auth/login`             | Pública      | Retorna JWT                     |
+| GET    | `/auth/me`                | Bearer       | Dados do usuário logado         |
+| GET    | `/lessons`                | Bearer + ✅  | Lista aulas (publicadas)        |
+| GET    | `/lessons/:id`            | Bearer + ✅  | Detalhe de aula                 |
+| POST   | `/lessons`                | Admin        | Criar aula                      |
+| PUT    | `/lessons/:id`            | Admin        | Atualizar aula                  |
+| DELETE | `/lessons/:id`            | Admin        | Remover aula                    |
+| GET    | `/settings/live-link`     | Pública      | URL da sessão ao vivo           |
+| PUT    | `/settings/live-link`     | Admin        | Atualizar URL                   |
+| GET    | `/health`                 | Pública      | Healthcheck                     |
+
+✅ = exige `is_active = true` (ou role admin).
+
+## 🛡️ Segurança
+
+- **Senhas:** Argon2id (memoryCost 64MB, timeCost 3, parallelism 4)
+- **JWT:** HS256 + HMAC-SHA256 do payload (defesa em profundidade)
+- **Validação:** `class-validator` + `ValidationPipe` (whitelist + forbidNonWhitelisted)
+- **Rate limit:** 100 req/min global; 5/min em login; 10/min em register
+- **CORS:** restrito a `CORS_ORIGIN`
+- **Middleware global:** valida Bearer em todas as rotas, exceto whitelist (login/register/health/live-link GET)
+
+## 👤 Tornando um usuário admin / ativo
+
+```sql
+UPDATE users
+SET role = 'admin', is_active = TRUE
+WHERE email = 'admin@email.com';
+```
+
+## 📦 Scripts
+
+### Backend
+- `npm run start:dev` — watch mode
+- `npm run build` — compila para `dist/`
+- `npm run start:prod` — roda build
+- `npm test` — testes unitários
+
+### Frontend
+- `npm run dev`
+- `npm run build`
+- `npm run preview`
+
+## 📜 Padrões
+
+Toda nova feature deve seguir os documentos em `.github/patterns/`:
+- `backend-architecture.md`
+- `database-architecture.md`
+- `frontend-architecture.md`
+- `testing-strategy.md`

@@ -1,0 +1,302 @@
+// =============================================================================
+// MAIN · entry-point de estilos globais (Alexandria EDU)
+// Convenções:
+//   · BEM (block__element--modifier) nos componentes
+//   · BENTO via mixin `bento-grid`
+//   · Liquid buttons via mixin `liquid-button`
+// =============================================================================
+
+@use 'variables' as *;
+@use 'mixins'    as *;
+@use 'fonts'     as *;
+@forward 'colors';
+@forward 'fonts';
+@use 'animations';
+
+// -----------------------------------------------------------------------------
+// Reset moderno
+// -----------------------------------------------------------------------------
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: $fs-base;
+  line-height: $lh-normal;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+// Background animado (mesh gradient sutil)
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  background:
+    radial-gradient(60rem 40rem at 10% 0%,  rgba(108, 92, 231, 0.30), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 20%, rgba(0, 217, 192, 0.22), transparent 60%),
+    radial-gradient(40rem 40rem at 50% 100%, rgba(255, 107, 157, 0.20), transparent 60%),
+    var(--gradient-night);
+  background-size: 200% 200%;
+  animation: aurora-shift 22s ease-in-out infinite;
+  filter: saturate(1.05);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: $fw-bold;
+  line-height: $lh-tight;
+  letter-spacing: $ls-tight;
+  margin: 0 0 $space-3;
+}
+
+h1 { font-size: clamp(#{$fs-2xl}, 5vw, #{$fs-4xl}); }
+h2 { font-size: clamp(#{$fs-xl}, 3.5vw, #{$fs-3xl}); }
+h3 { font-size: $fs-xl; }
+
+p { margin: 0 0 $space-3; color: var(--text-secondary); }
+
+a {
+  color: var(--color-secondary);
+  text-decoration: none;
+  transition: color $dur-fast $ease-out;
+  &:hover { color: var(--color-secondary-soft); }
+}
+
+img, svg { display: block; max-width: 100%; }
+
+::selection {
+  background: rgba(108, 92, 231, 0.45);
+  color: #fff;
+}
+
+// -----------------------------------------------------------------------------
+// Layout helpers
+// -----------------------------------------------------------------------------
+.l-container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: $space-5 $space-4;
+
+  @include breakpoint(md) { padding: $space-7 $space-6; }
+}
+
+.l-stack > * + * { margin-top: $space-4; }
+.l-cluster {
+  display: flex; flex-wrap: wrap; gap: $space-3; align-items: center;
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENT · Card (BEM)
+// -----------------------------------------------------------------------------
+.c-card {
+  @include card-glass;
+
+  &__eyebrow {
+    font-family: var(--font-display);
+    font-size: $fs-xs;
+    font-weight: $fw-semibold;
+    letter-spacing: $ls-wider;
+    text-transform: uppercase;
+    color: var(--color-secondary);
+    margin-bottom: $space-2;
+    display: inline-flex; align-items: center; gap: $space-2;
+  }
+
+  &__title {
+    font-family: var(--font-display);
+    font-size: $fs-lg;
+    font-weight: $fw-semibold;
+    color: var(--text-primary);
+    margin: 0 0 $space-2;
+  }
+
+  &__body { color: var(--text-secondary); font-size: $fs-sm; }
+
+  &__footer {
+    margin-top: $space-4;
+    display: flex; align-items: center; justify-content: space-between; gap: $space-3;
+  }
+
+  &__icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px;
+    border-radius: $radius-md;
+    background: var(--gradient-violet);
+    color: #fff;
+    box-shadow: $shadow-glow-primary;
+    margin-bottom: $space-3;
+  }
+
+  // Modificadores
+  &--primary    .c-card__icon { background: var(--gradient-violet); box-shadow: $shadow-glow-primary; }
+  &--secondary  .c-card__icon { background: var(--gradient-mint);   box-shadow: $shadow-glow-secondary; }
+  &--accent     .c-card__icon { background: var(--gradient-sunset); box-shadow: $shadow-glow-accent; }
+
+  &--feature {
+    background: var(--gradient-violet);
+    border-color: rgba(255,255,255,0.18);
+    .c-card__title, .c-card__body, .c-card__eyebrow { color: #fff; }
+    .c-card__eyebrow { color: rgba(255,255,255,0.78); }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENT · Bento Grid (BEM)
+// -----------------------------------------------------------------------------
+.c-bento {
+  @include bento-grid(4, $space-4);
+
+  &__cell           { @include bento-span(2, 1); }
+  &__cell--wide     { @include bento-span(4, 1); }
+  &__cell--tall     { @include bento-span(2, 2); }
+  &__cell--hero     { @include bento-span(4, 2); }
+  &__cell--compact  { @include bento-span(2, 1); }
+
+  @include breakpoint(md) {
+    &__cell          { grid-column: span 2; }
+    &__cell--wide    { grid-column: span 4; }
+    &__cell--tall    { grid-column: span 2; grid-row: span 2; }
+    &__cell--hero    { grid-column: span 4; grid-row: span 2; }
+    &__cell--compact { grid-column: span 1; }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENT · Liquid Button (BEM)
+// -----------------------------------------------------------------------------
+.c-btn {
+  @include liquid-button(#6C5CE7, #4B3FBA, rgba(108, 92, 231, 0.45));
+
+  &--secondary { @include liquid-button(#00D9C0, #00A68F, rgba(0, 217, 192, 0.45)); }
+  &--accent    { @include liquid-button(#FF6B9D, #D14B7C, rgba(255, 107, 157, 0.45)); }
+  &--gold      { @include liquid-button(#FFD166, #E0A93B, rgba(255, 209, 102, 0.45)); color: #2A1D00; }
+  &--ghost {
+    @include glass();
+    border-radius: $radius-pill;
+    padding: $space-3 $space-5;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: $space-2;
+    transition: background $dur-base $ease-out, transform $dur-base $ease-spring;
+
+    &:hover { background: var(--glass-bg-strong); transform: translateY(-2px); }
+  }
+
+  &--block { width: 100%; }
+  &--sm { padding: $space-2 $space-4; font-size: $fs-sm; }
+  &--lg { padding: $space-4 $space-6; font-size: $fs-md; }
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENT · Form Field (BEM)
+// -----------------------------------------------------------------------------
+.c-field {
+  display: flex; flex-direction: column; gap: $space-2;
+
+  &__label {
+    font-family: var(--font-display);
+    font-size: $fs-sm;
+    font-weight: $fw-medium;
+    color: var(--text-secondary);
+    display: inline-flex; align-items: center; gap: $space-2;
+  }
+
+  &__input {
+    width: 100%;
+    padding: $space-3 $space-4;
+    font-family: var(--font-body);
+    font-size: $fs-base;
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-subtle);
+    border-radius: $radius-md;
+    transition: border-color $dur-base $ease-out, box-shadow $dur-base $ease-out, background $dur-base $ease-out;
+
+    &::placeholder { color: var(--text-muted); }
+
+    &:hover { border-color: var(--border-strong); }
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      background: rgba(255,255,255,0.06);
+      box-shadow: 0 0 0 4px rgba(108, 92, 231, 0.20);
+    }
+  }
+
+  &__hint { font-size: $fs-xs; color: var(--text-muted); }
+  &__error {
+    font-size: $fs-sm;
+    color: var(--color-error);
+    display: flex; align-items: center; gap: $space-2;
+  }
+  &__success {
+    font-size: $fs-sm;
+    color: var(--color-success);
+    display: flex; align-items: center; gap: $space-2;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENT · Badge / Pill
+// -----------------------------------------------------------------------------
+.c-badge {
+  display: inline-flex; align-items: center; gap: $space-2;
+  padding: $space-1 $space-3;
+  border-radius: $radius-pill;
+  font-family: var(--font-display);
+  font-size: $fs-xs;
+  font-weight: $fw-semibold;
+  letter-spacing: $ls-wide;
+  text-transform: uppercase;
+  background: rgba(108, 92, 231, 0.18);
+  color: var(--color-primary-soft);
+  border: 1px solid rgba(108, 92, 231, 0.35);
+
+  &--secondary { background: rgba(0, 217, 192, 0.18);  color: var(--color-secondary-soft); border-color: rgba(0, 217, 192, 0.35); }
+  &--accent    { background: rgba(255, 107, 157, 0.18); color: var(--color-accent-soft);    border-color: rgba(255, 107, 157, 0.35); }
+  &--gold      { background: rgba(255, 209, 102, 0.18); color: var(--color-gold);           border-color: rgba(255, 209, 102, 0.35); }
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENT · Top App Bar
+// -----------------------------------------------------------------------------
+.c-appbar {
+  position: sticky; top: 0; z-index: $z-header;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: $space-3 $space-5;
+  @include glass();
+  border-radius: 0 0 $radius-xl $radius-xl;
+  border-top: none; border-left: none; border-right: none;
+
+  &__brand {
+    display: flex; align-items: center; gap: $space-3;
+    font-family: var(--font-display);
+    font-weight: $fw-bold;
+    letter-spacing: $ls-tight;
+    font-size: $fs-md;
+  }
+
+  &__logo {
+    width: 38px; height: 38px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: $radius-md;
+    background: var(--gradient-aurora);
+    background-size: 200% 200%;
+    animation: aurora-shift 8s ease-in-out infinite;
+    box-shadow: $shadow-glow-primary;
+    color: #fff;
+  }
+
+  &__actions { display: flex; gap: $space-2; align-items: center; }
+}

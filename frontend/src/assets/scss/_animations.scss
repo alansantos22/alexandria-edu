@@ -1,0 +1,52 @@
+// =============================================================================
+// ANIMATIONS · keyframes reutilizáveis
+// =============================================================================
+@use 'variables' as *;
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.55); }
+  50%      { box-shadow: 0 0 0 14px rgba(108, 92, 231, 0); }
+}
+
+@keyframes aurora-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+.a-fade-in-up { animation: fade-in-up $dur-slow $ease-out both; }
+.a-fade-in    { animation: fade-in $dur-slow $ease-out both; }
+.a-float      { animation: float-soft 4.5s ease-in-out infinite; }
+.a-pulse-glow { animation: pulse-glow 2.4s $ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

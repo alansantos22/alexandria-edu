@@ -1,0 +1,196 @@
+// =============================================================================
+// MIXINS · helpers reutilizáveis
+// =============================================================================
+@use 'variables' as *;
+@use 'fonts'     as *;
+@use 'sass:color';
+
+// -----------------------------------------------------------------------------
+// Responsive (mobile-first)
+// -----------------------------------------------------------------------------
+@mixin breakpoint($bp) {
+  @if $bp == sm  { @media (min-width: $bp-sm)  { @content; } }
+  @else if $bp == md  { @media (min-width: $bp-md)  { @content; } }
+  @else if $bp == lg  { @media (min-width: $bp-lg)  { @content; } }
+  @else if $bp == xl  { @media (min-width: $bp-xl)  { @content; } }
+  @else if $bp == xxl { @media (min-width: $bp-xxl) { @content; } }
+}
+
+// -----------------------------------------------------------------------------
+// Glassmorphism · base para cards e overlays
+// -----------------------------------------------------------------------------
+@mixin glass($strong: false) {
+  @if $strong {
+    background: var(--glass-bg-strong);
+  } @else {
+    background: var(--glass-bg);
+  }
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-border);
+}
+
+// -----------------------------------------------------------------------------
+// BENTO grid · grade modular ao estilo "bento box"
+// -----------------------------------------------------------------------------
+@mixin bento-grid($cols: 4, $gap: $space-4) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(140px, auto);
+  gap: $gap;
+
+  @include breakpoint(md) {
+    grid-template-columns: repeat($cols, minmax(0, 1fr));
+  }
+}
+
+// Modificadores de span de células BENTO
+@mixin bento-span($col: 1, $row: 1) {
+  grid-column: span $col;
+  grid-row: span $row;
+}
+
+// -----------------------------------------------------------------------------
+// LIQUID BUTTON · estilo Windows Vista (Aero) modernizado
+// Camadas: brilho superior, base com gradient, sheen animado, halo glow.
+// -----------------------------------------------------------------------------
+@mixin liquid-button($from, $to, $glow: rgba(108, 92, 231, 0.45)) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  padding: $space-3 $space-5;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: $radius-pill;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: $fs-base;
+  letter-spacing: 0.01em;
+  color: #fff;
+  cursor: pointer;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.45) 0%,
+      rgba(255,255,255,0.10) 48%,
+      rgba(0,0,0,0.00)        50%,
+      rgba(0,0,0,0.18)        100%),
+    linear-gradient(160deg, $from 0%, $to 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.65),
+    inset 0 -10px 24px rgba(0,0,0,0.20),
+    0 10px 24px rgba(0,0,0,0.30),
+    0 0 0 0 $glow;
+  transition:
+    transform $dur-base $ease-spring,
+    box-shadow $dur-base $ease-out,
+    filter $dur-base $ease-out;
+
+  // Sheen (reflexo líquido que cruza o botão)
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      115deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.55) 50%,
+      transparent 70%
+    );
+    transform: translateX(-120%);
+    transition: transform $dur-slower $ease-out;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  // Highlight superior (gloss Vista)
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 50%;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,0.55) 0%,
+      rgba(255,255,255,0.05) 100%);
+    border-radius: $radius-pill $radius-pill 0 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  > * { position: relative; z-index: 2; }
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    filter: brightness(1.08) saturate(1.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.75),
+      inset 0 -10px 28px rgba(0,0,0,0.22),
+      0 16px 36px rgba(0,0,0,0.40),
+      0 0 0 6px $glow;
+
+    &::before { transform: translateX(120%); }
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.985);
+    box-shadow:
+      inset 0 2px 6px rgba(0,0,0,0.30),
+      0 4px 12px rgba(0,0,0,0.30);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.65),
+      0 0 0 4px rgba(255,255,255,0.20),
+      0 0 0 8px $glow;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.4);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Card glass (BEM root: .c-card)
+// -----------------------------------------------------------------------------
+@mixin card-glass {
+  @include glass();
+  border-radius: $radius-xl;
+  padding: $space-5;
+  box-shadow: $shadow-md;
+  transition: transform $dur-base $ease-out, box-shadow $dur-base $ease-out, border-color $dur-base $ease-out;
+
+  &:hover {
+    transform: translateY(-4px);
+    border-color: rgba(255, 255, 255, 0.25);
+    box-shadow: $shadow-lg;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Focus ring acessível
+// -----------------------------------------------------------------------------
+@mixin focus-ring($color: var(--color-primary)) {
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.15), 0 0 0 5px #{$color};
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Visually hidden (acessibilidade)
+// -----------------------------------------------------------------------------
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
