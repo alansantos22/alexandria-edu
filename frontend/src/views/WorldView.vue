@@ -43,13 +43,14 @@
     <div v-if="state === 'ready'" class="v-world__hud-controls">
       <span>W A S D · {{ playerMode === 'driving' ? 'Dirigir' : 'Andar' }}</span>
       <span>E · {{ playerMode === 'driving' ? 'Sair do veículo' : 'Entrar no veículo' }}</span>
-      <span>Scroll · Zoom</span>
+      <span>C · Câmera: {{ ['Iso', '3ª Pessoa', '1ª Pessoa'][cameraModeRef] }}</span>
+      <span v-if="cameraModeRef === 0">Scroll · Zoom</span>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorldRenderer } from '@/composables/useWorldRenderer.js'
 import { cityService } from '@/core/services/city.service.js'
@@ -60,8 +61,21 @@ const router    = useRouter()
 
 let cities = []
 
-const { init, loadWorld, checkNearbyCities, resize, dispose, nearbyCity, playerPos, playerMode } =
-  useWorldRenderer(canvasRef)
+const {
+  init, loadWorld, checkNearbyCities, resize, dispose,
+  nearbyCity, enterCityZone, playerPos, playerMode, cameraModeRef,
+} = useWorldRenderer(canvasRef)
+
+// Open world entry: auto-navigate when player walks into a city plot
+watch(enterCityZone, city => {
+  if (!city || state.value !== 'ready') return
+  const me = JSON.parse(localStorage.getItem('user') || 'null')
+  if (city.userId === me?.id) {
+    router.push('/city')
+  } else {
+    router.push(`/city/${city.userId}`)
+  }
+})
 
 async function load() {
   state.value = 'loading'
@@ -70,7 +84,6 @@ async function load() {
     loadWorld(cities)
     state.value = 'ready'
 
-    // Check nearby cities on each animation frame
     ;(function poll() {
       if (state.value !== 'ready') return
       checkNearbyCities(cities)
