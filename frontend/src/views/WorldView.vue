@@ -41,7 +41,8 @@
 
     <!-- HUD — dicas de controle (bottom-right) -->
     <div v-if="state === 'ready'" class="v-world__hud-controls">
-      <span>W A S D · Dirigir</span>
+      <span>W A S D · {{ playerMode === 'driving' ? 'Dirigir' : 'Andar' }}</span>
+      <span>E · {{ playerMode === 'driving' ? 'Sair do veículo' : 'Entrar no veículo' }}</span>
       <span>Scroll · Zoom</span>
     </div>
   </div>
@@ -59,7 +60,7 @@ const router    = useRouter()
 
 let cities = []
 
-const { init, loadWorld, checkNearbyCities, resize, dispose, nearbyCity, playerPos } =
+const { init, loadWorld, checkNearbyCities, resize, dispose, nearbyCity, playerPos, playerMode } =
   useWorldRenderer(canvasRef)
 
 async function load() {
