@@ -24,18 +24,27 @@
       <span class="v-world__hud-val">{{ playerPos.x }}, {{ playerPos.z }}</span>
     </div>
 
+    <!-- HUD — dentro de uma cidade (banner central) -->
+    <Transition name="t-slide-up">
+      <div v-if="enterCityZone" class="v-world__hud-city v-world__hud-city--inside">
+        <span class="v-world__hud-city-name">🏙 {{ enterCityZone.username }}</span>
+        <div class="v-world__hud-city-meta">
+          <span>Nível {{ enterCityZone.cityLevel }}</span>
+          <span class="v-world__hud-city-dot">·</span>
+          <span>{{ enterCityZone.totalBuildings }} construções</span>
+        </div>
+      </div>
+    </Transition>
+
     <!-- HUD — cidade próxima (centro inferior) -->
     <Transition name="t-slide-up">
-      <div v-if="nearbyCity" class="v-world__hud-city">
+      <div v-if="nearbyCity && !enterCityZone" class="v-world__hud-city">
         <span class="v-world__hud-city-name">🏙 {{ nearbyCity.username }}</span>
         <div class="v-world__hud-city-meta">
           <span>Nível {{ nearbyCity.cityLevel }}</span>
           <span class="v-world__hud-city-dot">·</span>
           <span>{{ nearbyCity.totalBuildings }} construções</span>
         </div>
-        <button class="v-world__hud-city-btn" @click="visitCity">
-          Visitar cidade →
-        </button>
       </div>
     </Transition>
 
@@ -50,14 +59,12 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useWorldRenderer } from '@/composables/useWorldRenderer.js'
 import { cityService } from '@/core/services/city.service.js'
 
 const canvasRef = ref(null)
 const state     = ref('loading')
-const router    = useRouter()
 
 let cities = []
 
@@ -65,17 +72,6 @@ const {
   init, loadWorld, checkNearbyCities, resize, dispose,
   nearbyCity, enterCityZone, playerPos, playerMode, cameraModeRef,
 } = useWorldRenderer(canvasRef)
-
-// Open world entry: auto-navigate when player walks into a city plot
-watch(enterCityZone, city => {
-  if (!city || state.value !== 'ready') return
-  const me = JSON.parse(localStorage.getItem('user') || 'null')
-  if (city.userId === me?.id) {
-    router.push('/city')
-  } else {
-    router.push(`/city/${city.userId}`)
-  }
-})
 
 async function load() {
   state.value = 'loading'
@@ -91,12 +87,6 @@ async function load() {
     })()
   } catch {
     state.value = 'error'
-  }
-}
-
-function visitCity() {
-  if (nearbyCity.value) {
-    router.push(`/city/${nearbyCity.value.userId}`)
   }
 }
 
@@ -206,7 +196,7 @@ onBeforeUnmount(() => {
     font-family: monospace;
   }
 
-  // ── HUD Cidade próxima ────────────────────────────────────────────
+  // ── HUD Cidade próxima / dentro ──────────────────────────────────
   &__hud-city {
     position: absolute;
     bottom: $space-7;
@@ -226,6 +216,13 @@ onBeforeUnmount(() => {
     box-shadow: 0 0 28px rgba($brand-primary, 0.18);
     text-align: center;
     min-width: 200px;
+
+    &--inside {
+      bottom: auto;
+      top: $space-5;
+      border-color: rgba($brand-secondary, 0.5);
+      box-shadow: 0 0 28px rgba($brand-secondary, 0.25);
+    }
 
     &-name {
       font-size: 1rem;

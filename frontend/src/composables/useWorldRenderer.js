@@ -10,14 +10,21 @@ import {
 import { SimplexNoise } from 'three/addons/math/SimplexNoise.js'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const WORLD_SCALE  = 80
-const PLOT_RADIUS  = 13
-const ROAD_WIDTH   = 3.5
-const ROAD_MARGIN  = ROAD_WIDTH * 2.8
-const STUB_LENGTH  = WORLD_SCALE * 1.4
-const MAX_TREES    = 1600
-const TERRAIN_HALF = 420
-const ENTER_DIST   = 6
+const WORLD_SCALE    = 80
+const PLOT_RADIUS    = 13
+const ROAD_WIDTH     = 7        // total asphalt (2 lanes)
+const SIDEWALK_W     = 2.5
+const CURB_W         = 0.35
+const HALF_ROAD_TOTAL = ROAD_WIDTH / 2 + CURB_W + SIDEWALK_W  // 6.35
+// Cities sit in the block corner, clearly off the road
+const CORNER_OFFSET  = Math.ceil(HALF_ROAD_TOTAL + 3 + PLOT_RADIUS)  // 23
+const ROAD_REACH     = 1800     // road extends this far from origin
+const ROAD_GRID_N    = 5        // roads at n = -5 … +5 per axis
+const MAX_TREES      = 1200
+const TERRAIN_HALF   = 420
+const ENTER_DIST     = 6
+const DASH_LEN       = 4
+const GAP_LEN        = 6
 
 const noise = new SimplexNoise()
 
@@ -30,14 +37,16 @@ function seededRng(seed) {
   }
 }
 
-// Subtle terrain undulation — max ~0.38 units so roads (y≈0.04) stay visible
-function groundY(x, z) {
-  return noise.noise(x * 0.009, z * 0.009) * 0.28
-       + noise.noise(x * 0.028, z * 0.028) * 0.08
-}
+// Flat world — no elevation
+function groundY() { return 0 }
 
-function cityWorldPos(city) {
-  return new Vector3(city.worldX * WORLD_SCALE, 0, city.worldZ * WORLD_SCALE)
+// Visual world position of a city plot (beside road, not on it)
+function cityVisualPos(city) {
+  return new Vector3(
+    city.worldX * WORLD_SCALE + CORNER_OFFSET,
+    0,
+    city.worldZ * WORLD_SCALE + CORNER_OFFSET,
+  )
 }
 
 // ── Composable ────────────────────────────────────────────────────────────────
@@ -45,9 +54,9 @@ export function useWorldRenderer(canvasRef) {
   let renderer, scene, orthoCamera, perspCamera, camera, animId
   let camFrustum = 20
   let lastTime   = 0
-  let cameraMode = 0   // 0: isometric ortho | 1: 3rd person | 2: 1st person
+  let cameraMode = 0
 
-  const keysDown     = new Set()
+  const keysDown    = new Set()
   const roadSegments = []
   const ambientCars  = []
 
@@ -55,24 +64,17 @@ export function useWorldRenderer(canvasRef) {
 
   const npc = {
     group: null,
-    pos:   new Vector3(8, 0, 0),
+    pos:   new Vector3(0, 0, 8),
     angle: 0,
     speed: 0,
-    maxSpeed:  5.5,
-    accel:     18,
-    friction:  14,
-    turnSpeed: 3.2,
+    maxSpeed: 5.5, accel: 18, friction: 14, turnSpeed: 3.2,
   }
-
   const vehicle = {
     mesh:  null,
     pos:   new Vector3(0, 0, 0),
     angle: 0,
     speed: 0,
-    maxSpeed:  15,
-    accel:     24,
-    friction:  9,
-    turnSpeed: 2.3,
+    maxSpeed: 15, accel: 24, friction: 9, turnSpeed: 2.3,
   }
 
   const camPos    = new Vector3()
@@ -80,39 +82,37 @@ export function useWorldRenderer(canvasRef) {
 
   const ready         = ref(false)
   const nearbyCity    = ref(null)
-  const enterCityZone = ref(null)   // player is INSIDE a city plot
+  const enterCityZone = ref(null)
   const playerPos     = ref({ x: 0, z: 0 })
   const playerMode    = ref('walking')
   const cameraModeRef = ref(0)
 
-  // ── Init ─────────────────────────────────────────────────────────────────────
+  // ── Init ──────────────────────────────────────────────────────────────────────
   function init() {
     const canvas = canvasRef.value
     const W = canvas.clientWidth, H = canvas.clientHeight
 
-    renderer = new WebGLRenderer({ canvas, antialias: false })
+    renderer = new WebGLRenderer({ canvas, antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(W, H, false)
     renderer.shadowMap.enabled = true
 
     scene = new Scene()
-    scene.background = new Color(0x0c1a0a)
-    scene.fog = new FogExp2(0x0c1a0a, 0.005)
+    scene.background = new Color(0x0a1808)
+    scene.fog = new FogExp2(0x0a1808, 0.004)
 
     _buildCameras(W, H)
     _buildLights()
     _attachControls(canvas)
     _startLoop()
-
     ready.value = true
   }
 
   function _buildCameras(W, H) {
     const a = W / H
-    orthoCamera = new OrthographicCamera(-camFrustum * a, camFrustum * a, camFrustum, -camFrustum, 0.1, 900)
-    perspCamera = new PerspectiveCamera(65, a, 0.1, 900)
+    orthoCamera = new OrthographicCamera(-camFrustum * a, camFrustum * a, camFrustum, -camFrustum, 0.1, 1200)
+    perspCamera = new PerspectiveCamera(65, a, 0.1, 1200)
     camera = orthoCamera
-
     camPos.set(npc.pos.x + 20, 20, npc.pos.z + 20)
     camLookAt.copy(npc.pos)
     camera.position.copy(camPos)
@@ -120,10 +120,9 @@ export function useWorldRenderer(canvasRef) {
   }
 
   function _buildLights() {
-    scene.add(new AmbientLight(0xffffff, 0.72))
-    scene.add(new HemisphereLight(0xb8d4a0, 0x2a4a1a, 0.42))
-
-    const sun = new DirectionalLight(0xfff4d6, 1.1)
+    scene.add(new AmbientLight(0xffffff, 0.78))
+    scene.add(new HemisphereLight(0xb8d4a0, 0x2a4a1a, 0.38))
+    const sun = new DirectionalLight(0xfff4d6, 1.0)
     sun.position.set(40, 80, 30)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
@@ -131,10 +130,10 @@ export function useWorldRenderer(canvasRef) {
     scene.add(sun)
   }
 
-  // ── World generation ──────────────────────────────────────────────────────────
+  // ── World generation ───────────────────────────────────────────────────────────
   function loadWorld(cities) {
     _generateTerrain()
-    _generateRoads(cities)
+    _generateRoads()           // independent of cities
     _generateVegetation(cities)
     _generateCityPlots(cities)
     _spawnAmbientCars()
@@ -143,122 +142,97 @@ export function useWorldRenderer(canvasRef) {
   }
 
   function _generateTerrain() {
-    const size = TERRAIN_HALF * 2
-    const geo  = new PlaneGeometry(size, size, 100, 100)
-    const pos  = geo.attributes.position
-
-    // PlaneGeometry is in local XY plane. After mesh.rotation.x = -PI/2:
-    //   localX → worldX, localZ → worldY (height), localY → world -Z
-    // Displace local Z to get vertical terrain. Sample (localX, localY) ≈ (worldX, worldZ).
-    for (let i = 0; i < pos.count; i++) {
-      pos.setZ(i, groundY(pos.getX(i), pos.getY(i)))
-    }
-    geo.computeVertexNormals()
-
-    const mesh = new Mesh(geo, new MeshLambertMaterial({ color: 0x3a7a28 }))
+    // Flat ground — no vertex displacement
+    const mesh = new Mesh(
+      new PlaneGeometry(TERRAIN_HALF * 2, TERRAIN_HALF * 2),
+      new MeshLambertMaterial({ color: 0x3d7a28 }),
+    )
     mesh.rotation.x = -Math.PI / 2
     mesh.receiveShadow = true
     scene.add(mesh)
   }
 
-  function _generateRoads(cities) {
+  function _generateRoads() {
     roadSegments.length = 0
 
-    const roadMat = new MeshLambertMaterial({ color: 0x111118 })
-    const dashMat = new MeshLambertMaterial({ color: 0xffd166 })
+    const roadMat  = new MeshLambertMaterial({ color: 0x1c1c24 })
+    const swMat    = new MeshLambertMaterial({ color: 0x9e9e9e })
+    const curbMat  = new MeshLambertMaterial({ color: 0x565666 })
+    const dashMat  = new MeshLambertMaterial({ color: 0xffd166 })
 
-    // ── 1. City-to-city roads (grid neighbors) ────────────────────────────────
-    for (let i = 0; i < cities.length; i++) {
-      for (let j = i + 1; j < cities.length; j++) {
-        const a = cities[i], b = cities[j]
-        const dx = Math.abs(a.worldX - b.worldX)
-        const dz = Math.abs(a.worldZ - b.worldZ)
-        if (dx + dz !== 1) continue
+    const len           = ROAD_REACH * 2
+    const PERIOD        = DASH_LEN + GAP_LEN
+    const roadCount     = ROAD_GRID_N * 2 + 1
+    const dashesPerRoad = Math.floor(len / PERIOD)
 
-        const from = cityWorldPos(a)
-        const to   = cityWorldPos(b)
-        _placeRoadSegment(from, to, roadMat, dashMat)
-        roadSegments.push({ from: from.clone(), to: to.clone(), axis: dx === 1 ? 'x' : 'z', length: WORLD_SCALE })
-      }
-    }
+    // InstancedMesh for dashes — one per axis direction
+    const zDashInst = new InstancedMesh(
+      new BoxGeometry(0.18, 0.03, DASH_LEN), dashMat, roadCount * dashesPerRoad,
+    )
+    const xDashInst = new InstancedMesh(
+      new BoxGeometry(DASH_LEN, 0.03, 0.18), dashMat, roadCount * dashesPerRoad,
+    )
+    let zIdx = 0, xIdx = 0
+    const m = new Matrix4()
 
-    // ── 2. Stub roads: start from city CENTER through plot into open world ────
-    const dirs = [
-      { dx: 1, dz: 0 }, { dx: -1, dz: 0 },
-      { dx: 0, dz: 1 }, { dx: 0, dz: -1 },
-    ]
+    for (let n = -ROAD_GRID_N; n <= ROAD_GRID_N; n++) {
+      const coord = n * WORLD_SCALE
 
-    cities.forEach(city => {
-      dirs.forEach(({ dx, dz }) => {
-        const hasNeighbor = cities.some(c =>
-          c.worldX === city.worldX + dx && c.worldZ === city.worldZ + dz,
-        )
-        if (hasNeighbor) return
+      // ── Z-axis road (runs along Z at x=coord) ───────────────────────────────
+      const zRoad = new Mesh(new BoxGeometry(ROAD_WIDTH, 0.015, len), roadMat)
+      zRoad.position.set(coord, 0.008, 0)
+      zRoad.receiveShadow = true
+      scene.add(zRoad)
 
-        const cx  = city.worldX * WORLD_SCALE
-        const cz  = city.worldZ * WORLD_SCALE
-        // Start from center so road visibly crosses through the city plot
-        const from = new Vector3(cx, 0, cz)
-        const to   = new Vector3(
-          cx + dx * (PLOT_RADIUS + STUB_LENGTH),
-          0,
-          cz + dz * (PLOT_RADIUS + STUB_LENGTH),
-        )
+      // ── X-axis road (runs along X at z=coord) ── slightly higher for intersect ─
+      const xRoad = new Mesh(new BoxGeometry(len, 0.015, ROAD_WIDTH), roadMat)
+      xRoad.position.set(0, 0.014, coord)
+      xRoad.receiveShadow = true
+      scene.add(xRoad)
 
-        _placeRoadSegment(from, to, roadMat, dashMat)
-        roadSegments.push({
-          from: from.clone(), to: to.clone(),
-          axis: dx !== 0 ? 'x' : 'z',
-          length: PLOT_RADIUS + STUB_LENGTH,
-        })
+      // Sidewalks + curbs for both axes
+      ;[-1, 1].forEach(side => {
+        const curbOff = ROAD_WIDTH / 2 + CURB_W / 2
+        const swOff   = ROAD_WIDTH / 2 + CURB_W + SIDEWALK_W / 2
+
+        // Z-axis road sides
+        const zCurb = new Mesh(new BoxGeometry(CURB_W, 0.1, len), curbMat)
+        zCurb.position.set(coord + side * curbOff, 0.05, 0)
+        scene.add(zCurb)
+
+        const zSw = new Mesh(new BoxGeometry(SIDEWALK_W, 0.04, len), swMat)
+        zSw.position.set(coord + side * swOff, 0.02, 0)
+        zSw.receiveShadow = true
+        scene.add(zSw)
+
+        // X-axis road sides
+        const xCurb = new Mesh(new BoxGeometry(len, 0.1, CURB_W), curbMat)
+        xCurb.position.set(0, 0.055, coord + side * curbOff)
+        scene.add(xCurb)
+
+        const xSw = new Mesh(new BoxGeometry(len, 0.04, SIDEWALK_W), swMat)
+        xSw.position.set(0, 0.025, coord + side * swOff)
+        xSw.receiveShadow = true
+        scene.add(xSw)
       })
-    })
-  }
 
-  // Subdivide into short sections so each section can sit at local terrain height
-  function _placeRoadSegment(from, to, roadMat, dashMat) {
-    const dx = to.x - from.x
-    const dz = to.z - from.z
-    const totalLen = Math.sqrt(dx * dx + dz * dz)
-    if (totalLen < 0.1) return
+      // Center dashes — instanced
+      for (let d = 0; d < dashesPerRoad; d++) {
+        const t = -ROAD_REACH + d * PERIOD + PERIOD / 2
+        m.setPosition(coord, 0.025, t); zDashInst.setMatrixAt(zIdx++, m)
+        m.setPosition(t, 0.03, coord);  xDashInst.setMatrixAt(xIdx++, m)
+      }
 
-    const nx   = dx / totalLen
-    const nz   = dz / totalLen
-    const axis = Math.abs(dx) > Math.abs(dz) ? 'x' : 'z'
-
-    const STEP = 8
-    let t = 0
-    while (t < totalLen) {
-      const segLen = Math.min(STEP, totalLen - t)
-      const sx = from.x + nx * (t + segLen / 2)
-      const sz = from.z + nz * (t + segLen / 2)
-      const gy = groundY(sx, sz) + 0.04
-
-      const roadGeo = axis === 'x'
-        ? new BoxGeometry(segLen + 0.1, 0.08, ROAD_WIDTH)
-        : new BoxGeometry(ROAD_WIDTH, 0.08, segLen + 0.1)
-
-      const road = new Mesh(roadGeo, roadMat)
-      road.position.set(sx, gy, sz)
-      road.receiveShadow = true
-      scene.add(road)
-      t += STEP
+      // Store for ambient cars + _nearRoad
+      roadSegments.push(
+        { axis: 'z', coord, from: new Vector3(coord, 0, -ROAD_REACH), to: new Vector3(coord, 0, ROAD_REACH), length: ROAD_REACH * 2 },
+        { axis: 'x', coord, from: new Vector3(-ROAD_REACH, 0, coord), to: new Vector3(ROAD_REACH, 0, coord), length: ROAD_REACH * 2 },
+      )
     }
 
-    // Dashed center line
-    const dashLen = 3, gapLen = 4
-    let td = gapLen / 2
-    while (td + dashLen < totalLen) {
-      const p  = from.clone().lerp(to, (td + dashLen / 2) / totalLen)
-      const gy = groundY(p.x, p.z) + 0.1
-      const dg = axis === 'x'
-        ? new BoxGeometry(dashLen, 0.06, 0.22)
-        : new BoxGeometry(0.22, 0.06, dashLen)
-      const d = new Mesh(dg, dashMat)
-      d.position.set(p.x, gy, p.z)
-      scene.add(d)
-      td += dashLen + gapLen
-    }
+    zDashInst.instanceMatrix.needsUpdate = true
+    xDashInst.instanceMatrix.needsUpdate = true
+    scene.add(zDashInst, xDashInst)
   }
 
   function _generateVegetation(cities) {
@@ -268,36 +242,26 @@ export function useWorldRenderer(canvasRef) {
 
     while (placed.length < MAX_TREES && attempts < MAX_TREES * 6) {
       attempts++
-      const x = (rng() * 2 - 1) * TERRAIN_HALF * 0.92
-      const z = (rng() * 2 - 1) * TERRAIN_HALF * 0.92
+      const x = (rng() * 2 - 1) * TERRAIN_HALF * 0.9
+      const z = (rng() * 2 - 1) * TERRAIN_HALF * 0.9
       if (_nearRoad(x, z) || _nearCity(x, z, cities)) continue
       placed.push({ x, z, s: 0.55 + rng() * 0.85 })
     }
 
-    const n = placed.length
-
-    const trunkGeo  = new CylinderGeometry(0.1, 0.16, 1.0, 5)
-    const trunkMat  = new MeshLambertMaterial({ color: 0x3e2a18 })
-    const trunkMesh = new InstancedMesh(trunkGeo, trunkMat, n)
-    trunkMesh.castShadow = true
-
-    const coneGeo  = new ConeGeometry(0.88, 2.2, 6)
+    const n        = placed.length
+    const trunkMat = new MeshLambertMaterial({ color: 0x3e2a18 })
     const coneMat  = new MeshLambertMaterial({ color: 0x1e5c18 })
-    const coneMesh = new InstancedMesh(coneGeo, coneMat, n)
-    coneMesh.castShadow = true
+    const trunkInst = new InstancedMesh(new CylinderGeometry(0.1, 0.16, 1.0, 5), trunkMat, n)
+    const coneInst  = new InstancedMesh(new ConeGeometry(0.88, 2.2, 6), coneMat, n)
+    trunkInst.castShadow = coneInst.castShadow = true
 
-    const m = new Matrix4()
+    const mm = new Matrix4()
     placed.forEach(({ x, z, s }, i) => {
-      const y = groundY(x, z)
-      m.makeScale(s, s, s); m.setPosition(x, y + 0.5 * s, z)
-      trunkMesh.setMatrixAt(i, m)
-      m.makeScale(s, s, s); m.setPosition(x, y + 1.65 * s, z)
-      coneMesh.setMatrixAt(i, m)
+      mm.makeScale(s, s, s); mm.setPosition(x, 0.5 * s, z);       trunkInst.setMatrixAt(i, mm)
+      mm.makeScale(s, s, s); mm.setPosition(x, 1.65 * s, z);      coneInst.setMatrixAt(i, mm)
     })
-
-    trunkMesh.instanceMatrix.needsUpdate = true
-    coneMesh.instanceMatrix.needsUpdate  = true
-    scene.add(trunkMesh, coneMesh)
+    trunkInst.instanceMatrix.needsUpdate = coneInst.instanceMatrix.needsUpdate = true
+    scene.add(trunkInst, coneInst)
   }
 
   function _generateCityPlots(cities) {
@@ -306,17 +270,14 @@ export function useWorldRenderer(canvasRef) {
     const size      = PLOT_RADIUS * 2
 
     cities.forEach(city => {
-      const cx = city.worldX * WORLD_SCALE
-      const cz = city.worldZ * WORLD_SCALE
-
-      const plat = new Mesh(new BoxGeometry(size, 0.25, size), platMat)
-      plat.position.set(cx, 0.12, cz)
+      const vp = cityVisualPos(city)
+      const plat = new Mesh(new BoxGeometry(size, 0.18, size), platMat)
+      plat.position.set(vp.x, 0.09, vp.z)
       plat.receiveShadow = true
-      plat.userData.city = city
       scene.add(plat)
 
-      const border = new Mesh(new BoxGeometry(size + 0.5, 0.14, size + 0.5), borderMat)
-      border.position.set(cx, 0.07, cz)
+      const border = new Mesh(new BoxGeometry(size + 0.5, 0.1, size + 0.5), borderMat)
+      border.position.set(vp.x, 0.05, vp.z)
       scene.add(border)
     })
   }
@@ -326,22 +287,26 @@ export function useWorldRenderer(canvasRef) {
     const carGeo  = new BoxGeometry(1.5, 0.65, 2.8)
     const rng     = seededRng(0xf00dcafe)
 
-    roadSegments.forEach((seg, si) => {
-      const count = 1 + (si % 3 === 0 ? 1 : 0)
-      for (let i = 0; i < count; i++) {
-        const mat  = new MeshLambertMaterial({ color: palette[(si + i) % palette.length] })
+    // Only spawn cars on roads near the world origin (feels populated, avoids clutter)
+    const nearSegs = roadSegments.filter(s => Math.abs(s.coord) <= WORLD_SCALE)
+
+    nearSegs.forEach((seg, si) => {
+      for (let i = 0; i < 3; i++) {
+        const mat  = new MeshLambertMaterial({ color: palette[(si * 3 + i) % palette.length] })
         const mesh = new Mesh(carGeo, mat)
         mesh.castShadow = true
 
-        const t    = (i + rng() * 0.5) / count
-        const lane = i % 2 === 0 ? 0.9 : -0.9
+        if (seg.axis === 'x') mesh.rotation.y = Math.PI / 2
+
+        const t    = rng()
+        const lane = i % 2 === 0 ? 1.1 : -1.1
         const pos  = seg.from.clone().lerp(seg.to, t)
 
-        if (seg.axis === 'x') { pos.z += lane; mesh.rotation.y = Math.PI / 2 }
-        else                  { pos.x += lane }
+        if (seg.axis === 'x') pos.z += lane
+        else                  pos.x += lane
 
         mesh.position.set(pos.x, 0.42, pos.z)
-        mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 5 + rng() * 5, lane }
+        mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane }
         scene.add(mesh)
         ambientCars.push(mesh)
       }
@@ -351,44 +316,33 @@ export function useWorldRenderer(canvasRef) {
   // ── Player vehicle ─────────────────────────────────────────────────────────────
   function _spawnVehicle() {
     const geo = new BoxGeometry(1.4, 0.68, 2.8)
-    const mat = new MeshLambertMaterial({ color: 0x6c5ce7 })
-    vehicle.mesh = new Mesh(geo, mat)
+    vehicle.mesh = new Mesh(geo, new MeshLambertMaterial({ color: 0x6c5ce7 }))
     vehicle.mesh.castShadow = true
-
-    const hGeo = new BoxGeometry(0.28, 0.14, 0.1)
     const hMat = new MeshLambertMaterial({ color: 0xfff4e0, emissive: 0xfff4e0, emissiveIntensity: 0.8 })
     ;[-0.44, 0.44].forEach(ox => {
-      const h = new Mesh(hGeo, hMat)
+      const h = new Mesh(new BoxGeometry(0.28, 0.14, 0.1), hMat)
       h.position.set(ox, 0.1, -1.45)
       vehicle.mesh.add(h)
     })
-
     vehicle.mesh.position.copy(vehicle.pos)
     scene.add(vehicle.mesh)
   }
 
-  // ── NPC: body (prisma retangular) + cabeça (cubo flutuando) ───────────────────
+  // ── NPC ────────────────────────────────────────────────────────────────────────
   function _spawnNpc() {
     npc.group = new Group()
-
-    const bodyGeo = new BoxGeometry(0.5, 1.1, 0.35)
-    const bodyMat = new MeshLambertMaterial({ color: 0x8e7df0 })
-    const body    = new Mesh(bodyGeo, bodyMat)
+    const body = new Mesh(new BoxGeometry(0.5, 1.1, 0.35), new MeshLambertMaterial({ color: 0x8e7df0 }))
     body.position.set(0, 0.55, 0)
     body.castShadow = true
-
-    const headGeo = new BoxGeometry(0.4, 0.4, 0.4)
-    const headMat = new MeshLambertMaterial({ color: 0xf0d4b0 })
-    const head    = new Mesh(headGeo, headMat)
+    const head = new Mesh(new BoxGeometry(0.4, 0.4, 0.4), new MeshLambertMaterial({ color: 0xf0d4b0 }))
     head.position.set(0, 1.3, 0)
     head.castShadow = true
-
     npc.group.add(body, head)
     npc.group.position.copy(npc.pos)
     scene.add(npc.group)
   }
 
-  // ── Enter / Exit vehicle ───────────────────────────────────────────────────────
+  // ── Enter / Exit ───────────────────────────────────────────────────────────────
   function _enterVehicle() {
     mode = 'driving'
     playerMode.value = 'driving'
@@ -398,10 +352,9 @@ export function useWorldRenderer(canvasRef) {
   function _exitVehicle() {
     mode = 'walking'
     playerMode.value = 'walking'
-    // Place NPC beside the vehicle
     const right = new Vector3(Math.cos(vehicle.angle), 0, -Math.sin(vehicle.angle))
     npc.pos.copy(vehicle.pos).addScaledVector(right, 2.2)
-    npc.pos.y = groundY(npc.pos.x, npc.pos.z)
+    npc.pos.y = 0
     npc.angle = vehicle.angle
     if (npc.group) {
       npc.group.position.copy(npc.pos)
@@ -416,16 +369,10 @@ export function useWorldRenderer(canvasRef) {
       animId = requestAnimationFrame(tick)
       const dt = Math.min((now - lastTime) / 1000, 0.05)
       lastTime = now
-
-      if (mode === 'walking') {
-        _updateNpc(dt)
-      } else {
-        _updateVehicle(dt)
-      }
-
+      if (mode === 'walking') _updateNpc(dt)
+      else                    _updateVehicle(dt)
       _updateAmbientCars(dt)
       _updateCamera(dt)
-
       renderer.render(scene, camera)
     }
     tick()
@@ -436,25 +383,16 @@ export function useWorldRenderer(canvasRef) {
     const back  = keysDown.has('ArrowDown')  || keysDown.has('KeyS')
     const left  = keysDown.has('ArrowLeft')  || keysDown.has('KeyA')
     const right = keysDown.has('ArrowRight') || keysDown.has('KeyD')
-
     if (fwd)  npc.speed = Math.min(npc.speed + npc.accel * dt, npc.maxSpeed)
     if (back) npc.speed = Math.max(npc.speed - npc.accel * dt, -npc.maxSpeed * 0.4)
     if (!fwd && !back) npc.speed *= Math.max(0, 1 - npc.friction * dt)
-
     if (Math.abs(npc.speed) > 0.1) {
-      const steer = (left ? 1 : 0) - (right ? 1 : 0)
-      npc.angle += steer * npc.turnSpeed * dt * Math.sign(npc.speed)
+      npc.angle += ((left ? 1 : 0) - (right ? 1 : 0)) * npc.turnSpeed * dt * Math.sign(npc.speed)
     }
-
     npc.pos.x += Math.sin(npc.angle) * npc.speed * dt
     npc.pos.z += Math.cos(npc.angle) * npc.speed * dt
-    npc.pos.y  = groundY(npc.pos.x, npc.pos.z)
-
-    if (npc.group) {
-      npc.group.position.copy(npc.pos)
-      npc.group.rotation.y = npc.angle
-    }
-
+    npc.pos.y  = 0
+    if (npc.group) { npc.group.position.copy(npc.pos); npc.group.rotation.y = npc.angle }
     playerPos.value = { x: Math.round(npc.pos.x), z: Math.round(npc.pos.z) }
   }
 
@@ -463,25 +401,16 @@ export function useWorldRenderer(canvasRef) {
     const back  = keysDown.has('ArrowDown')  || keysDown.has('KeyS')
     const left  = keysDown.has('ArrowLeft')  || keysDown.has('KeyA')
     const right = keysDown.has('ArrowRight') || keysDown.has('KeyD')
-
     if (fwd)  vehicle.speed = Math.min(vehicle.speed + vehicle.accel * dt, vehicle.maxSpeed)
     if (back) vehicle.speed = Math.max(vehicle.speed - vehicle.accel * dt, -vehicle.maxSpeed * 0.45)
     if (!fwd && !back) vehicle.speed *= Math.max(0, 1 - vehicle.friction * dt)
-
     if (Math.abs(vehicle.speed) > 0.15) {
-      const steer = (left ? 1 : 0) - (right ? 1 : 0)
-      vehicle.angle += steer * vehicle.turnSpeed * dt * Math.sign(vehicle.speed)
+      vehicle.angle += ((left ? 1 : 0) - (right ? 1 : 0)) * vehicle.turnSpeed * dt * Math.sign(vehicle.speed)
     }
-
     vehicle.pos.x += Math.sin(vehicle.angle) * vehicle.speed * dt
     vehicle.pos.z += Math.cos(vehicle.angle) * vehicle.speed * dt
-    vehicle.pos.y  = groundY(vehicle.pos.x, vehicle.pos.z) + 0.42
-
-    if (vehicle.mesh) {
-      vehicle.mesh.position.copy(vehicle.pos)
-      vehicle.mesh.rotation.y = vehicle.angle
-    }
-
+    vehicle.pos.y  = 0.42
+    if (vehicle.mesh) { vehicle.mesh.position.copy(vehicle.pos); vehicle.mesh.rotation.y = vehicle.angle }
     playerPos.value = { x: Math.round(vehicle.pos.x), z: Math.round(vehicle.pos.z) }
   }
 
@@ -491,7 +420,6 @@ export function useWorldRenderer(canvasRef) {
       car.userData.t += (speed * dt / seg.length) * dir
       if (car.userData.t > 1) car.userData.t = 0
       if (car.userData.t < 0) car.userData.t = 1
-
       const p = seg.from.clone().lerp(seg.to, car.userData.t)
       if (seg.axis === 'x') p.z += lane
       else                  p.x += lane
@@ -499,48 +427,38 @@ export function useWorldRenderer(canvasRef) {
     })
   }
 
-  // ── Camera update ──────────────────────────────────────────────────────────────
+  // ── Camera ─────────────────────────────────────────────────────────────────────
   function _updateCamera(dt) {
     const target = mode === 'driving' ? vehicle.pos : npc.pos
     const angle  = mode === 'driving' ? vehicle.angle : npc.angle
     const lerpK  = Math.min(1, 8 * dt)
 
     if (cameraMode === 0) {
-      // ── Isometric orthographic ─────────────────────────────────────────────
       camera = orthoCamera
       const off = camFrustum * 1.15
-      camPos.x += (target.x + off - camPos.x) * lerpK
-      camPos.z += (target.z + off - camPos.z) * lerpK
-      camPos.y  = camFrustum * 1.05
+      camPos.x  += (target.x + off - camPos.x) * lerpK
+      camPos.z  += (target.z + off - camPos.z) * lerpK
+      camPos.y   = camFrustum * 1.05
       camLookAt.x += (target.x - camLookAt.x) * lerpK
       camLookAt.z += (target.z - camLookAt.z) * lerpK
       camLookAt.y  = 0
-
     } else if (cameraMode === 1) {
-      // ── 3rd person perspective ─────────────────────────────────────────────
       camera = perspCamera
-      const dist   = 12, height = 5
-      const idealX = target.x - Math.sin(angle) * dist
-      const idealZ = target.z - Math.cos(angle) * dist
+      const idealX = target.x - Math.sin(angle) * 12
+      const idealZ = target.z - Math.cos(angle) * 12
       camPos.x += (idealX          - camPos.x) * lerpK
-      camPos.y += (target.y + height - camPos.y) * lerpK
+      camPos.y += (target.y + 5    - camPos.y) * lerpK
       camPos.z += (idealZ          - camPos.z) * lerpK
-      camLookAt.x += (target.x - camLookAt.x) * lerpK
-      camLookAt.y += (target.y + 1.2 - camLookAt.y) * lerpK
-      camLookAt.z += (target.z - camLookAt.z) * lerpK
-
+      camLookAt.x += (target.x     - camLookAt.x) * lerpK
+      camLookAt.y += (target.y + 1 - camLookAt.y) * lerpK
+      camLookAt.z += (target.z     - camLookAt.z) * lerpK
     } else {
-      // ── 1st person perspective ─────────────────────────────────────────────
       camera = perspCamera
-      const lerpFast = Math.min(1, 18 * dt)
-      const eyeX = target.x + Math.sin(angle) * 0.3
-      const eyeZ = target.z + Math.cos(angle) * 0.3
-      camPos.x += (eyeX          - camPos.x) * lerpFast
-      camPos.y += (target.y + 1.6 - camPos.y) * lerpFast
-      camPos.z += (eyeZ          - camPos.z) * lerpFast
-      camLookAt.x = camPos.x + Math.sin(angle) * 10
-      camLookAt.y = camPos.y
-      camLookAt.z = camPos.z + Math.cos(angle) * 10
+      const lf = Math.min(1, 18 * dt)
+      camPos.x += (target.x + Math.sin(angle) * 0.3 - camPos.x) * lf
+      camPos.y += (target.y + 1.6                   - camPos.y) * lf
+      camPos.z += (target.z + Math.cos(angle) * 0.3 - camPos.z) * lf
+      camLookAt.set(camPos.x + Math.sin(angle) * 10, camPos.y, camPos.z + Math.cos(angle) * 10)
     }
 
     camera.position.copy(camPos)
@@ -551,54 +469,46 @@ export function useWorldRenderer(canvasRef) {
       perspCamera.updateProjectionMatrix()
     }
 
-    // Hide NPC body in 1st person (camera is at eye level)
-    if (npc.group && mode === 'walking') {
-      npc.group.visible = cameraMode !== 2
-    }
+    if (npc.group && mode === 'walking') npc.group.visible = cameraMode !== 2
   }
 
-  // ── Nearby / enter city checks (called from WorldView each rAF) ───────────────
+  // ── Nearby city check ─────────────────────────────────────────────────────────
   function checkNearbyCities(cities) {
     nearbyCity.value    = null
     enterCityZone.value = null
     const pos = mode === 'driving' ? vehicle.pos : npc.pos
     for (const city of cities) {
-      const cx   = city.worldX * WORLD_SCALE
-      const cz   = city.worldZ * WORLD_SCALE
-      const dist = Math.hypot(pos.x - cx, pos.z - cz)
+      const vp   = cityVisualPos(city)
+      const dist = Math.hypot(pos.x - vp.x, pos.z - vp.z)
       if (dist < PLOT_RADIUS) {
-        enterCityZone.value = city   // inside the plot → open world auto-entry
+        enterCityZone.value = city
         return
       }
-      if (dist < PLOT_RADIUS + 18) {
-        nearbyCity.value = city      // nearby → show info panel
+      if (dist < PLOT_RADIUS + 20) {
+        nearbyCity.value = city
       }
     }
   }
 
-  // ── Controls ───────────────────────────────────────────────────────────────────
+  // ── Road / city proximity helpers ──────────────────────────────────────────────
   function _nearRoad(x, z) {
-    for (const seg of roadSegments) {
-      if (seg.axis === 'x') {
-        const minX = Math.min(seg.from.x, seg.to.x) - ROAD_MARGIN
-        const maxX = Math.max(seg.from.x, seg.to.x) + ROAD_MARGIN
-        if (x >= minX && x <= maxX && Math.abs(z - seg.from.z) < ROAD_MARGIN) return true
-      } else {
-        const minZ = Math.min(seg.from.z, seg.to.z) - ROAD_MARGIN
-        const maxZ = Math.max(seg.from.z, seg.to.z) + ROAD_MARGIN
-        if (z >= minZ && z <= maxZ && Math.abs(x - seg.from.x) < ROAD_MARGIN) return true
-      }
+    const margin = HALF_ROAD_TOTAL + 2
+    for (let n = -ROAD_GRID_N; n <= ROAD_GRID_N; n++) {
+      const c = n * WORLD_SCALE
+      if (Math.abs(x - c) < margin) return true   // Z-axis road
+      if (Math.abs(z - c) < margin) return true   // X-axis road
     }
     return false
   }
 
   function _nearCity(x, z, cities) {
-    return cities.some(c =>
-      Math.abs(x - c.worldX * WORLD_SCALE) < PLOT_RADIUS + 5 &&
-      Math.abs(z - c.worldZ * WORLD_SCALE) < PLOT_RADIUS + 5,
-    )
+    return cities.some(c => {
+      const vp = cityVisualPos(c)
+      return Math.abs(x - vp.x) < PLOT_RADIUS + 4 && Math.abs(z - vp.z) < PLOT_RADIUS + 4
+    })
   }
 
+  // ── Controls ───────────────────────────────────────────────────────────────────
   function _attachControls(canvas) {
     canvas.setAttribute('tabindex', '0')
     window.addEventListener('keydown', _onKey)
@@ -617,22 +527,17 @@ export function useWorldRenderer(canvasRef) {
     if (block.includes(e.key) && e.type === 'keydown') e.preventDefault()
 
     if (e.type === 'keydown') {
-      // E: enter/exit vehicle — only on first press (not key repeat)
       if (e.code === 'KeyE' && !keysDown.has('KeyE')) {
         if (mode === 'driving') {
           _exitVehicle()
-        } else {
-          const dist = npc.pos.distanceTo(vehicle.pos)
-          if (dist < ENTER_DIST) _enterVehicle()
+        } else if (npc.pos.distanceTo(vehicle.pos) < ENTER_DIST) {
+          _enterVehicle()
         }
       }
-
-      // C: cycle camera mode
       if (e.code === 'KeyC' && !keysDown.has('KeyC')) {
         cameraMode = (cameraMode + 1) % 3
         cameraModeRef.value = cameraMode
       }
-
       keysDown.add(e.code)
     } else {
       keysDown.delete(e.code)
@@ -641,12 +546,11 @@ export function useWorldRenderer(canvasRef) {
 
   function _onWheel(e) {
     e.preventDefault()
-    if (cameraMode !== 0) return  // scroll zoom only in iso mode
-    const canvas = canvasRef.value
-    const a = canvas.clientWidth / canvas.clientHeight
+    if (cameraMode !== 0) return
+    const a = canvasRef.value.clientWidth / canvasRef.value.clientHeight
     camFrustum = Math.max(8, Math.min(55, camFrustum + e.deltaY * 0.018))
-    orthoCamera.left   = -camFrustum * a; orthoCamera.right  =  camFrustum * a
-    orthoCamera.top    =  camFrustum;      orthoCamera.bottom = -camFrustum
+    orthoCamera.left = -camFrustum * a; orthoCamera.right  =  camFrustum * a
+    orthoCamera.top  =  camFrustum;     orthoCamera.bottom = -camFrustum
     orthoCamera.updateProjectionMatrix()
   }
 
@@ -655,14 +559,11 @@ export function useWorldRenderer(canvasRef) {
     const canvas = canvasRef.value
     if (!canvas || !renderer) return
     const W = canvas.clientWidth, H = canvas.clientHeight, a = W / H
-
-    orthoCamera.left   = -camFrustum * a; orthoCamera.right  =  camFrustum * a
-    orthoCamera.top    =  camFrustum;      orthoCamera.bottom = -camFrustum
+    orthoCamera.left = -camFrustum * a; orthoCamera.right  =  camFrustum * a
+    orthoCamera.top  =  camFrustum;     orthoCamera.bottom = -camFrustum
     orthoCamera.updateProjectionMatrix()
-
     perspCamera.aspect = a
     perspCamera.updateProjectionMatrix()
-
     renderer.setSize(W, H, false)
   }
 

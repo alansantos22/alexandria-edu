@@ -12,6 +12,10 @@ export class Lesson {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /** FK opcional para a tabela modules (migration 003) */
+  @Column({ name: 'module_id', type: 'varchar', length: 36, nullable: true })
+  moduleId: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   title: string;
 

@@ -19,6 +19,7 @@ const routes = [
   { path: '/world',        component: () => import('../views/WorldView.vue'),   meta: { requiresAuth: true } },
   { path: '/city',         component: () => import('../views/CityView.vue'),    meta: { requiresAuth: true } },
   { path: '/city/:userId', component: () => import('../views/CityView.vue'),    meta: { requiresAuth: true } },
+  { path: '/u/:username',  component: () => import('../views/Profile.vue'),     meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

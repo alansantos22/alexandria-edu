@@ -17,6 +17,7 @@ import { ForumModule } from './modules/forum/forum.module';
 import { EconomyModule }      from './modules/economy/economy.module';
 import { MarketplaceModule }  from './modules/marketplace/marketplace.module';
 import { CityModule }         from './modules/city/city.module';
+import { ProfileModule }      from './modules/profile/profile.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -39,6 +40,7 @@ import { HealthController } from './common/health/health.controller';
     EconomyModule,
     MarketplaceModule,
     CityModule,
+    ProfileModule,
   ],
   controllers: [HealthController],
   providers: [

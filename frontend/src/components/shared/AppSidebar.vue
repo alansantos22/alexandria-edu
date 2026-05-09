@@ -56,6 +56,10 @@
       <div
         class="c-sidebar__user"
         :title="collapsed ? (user?.username || 'Aluno') : undefined"
+        role="button"
+        tabindex="0"
+        @click="goToProfile"
+        @keydown.enter="goToProfile"
       >
         <div class="c-sidebar__avatar">{{ userInitial }}</div>
         <div class="c-sidebar__user-info">
@@ -141,6 +145,11 @@ function handleLogout() {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
   router.push('/')
+}
+
+function goToProfile() {
+  const username = user.value?.username
+  if (username) router.push(`/u/${encodeURIComponent(username)}`)
 }
 </script>
 
@@ -312,6 +321,12 @@ $_transition:   width $dur-base $ease-out, transform $dur-base $ease-out;
     padding: $space-2 $space-2;
     border-radius: $radius-md;
     overflow: hidden;
+    cursor: pointer;
+    transition: background $dur-fast $ease-out;
+
+    &:hover {
+      background: rgba($neutral-600, 0.25);
+    }
   }
 
   &__avatar {

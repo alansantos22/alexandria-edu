@@ -1,0 +1,115 @@
+// =============================================================================
+// PROFILE · estilos globais do sistema de perfil público
+// Classes globais: .c-card-collectible, .c-badge-tile, .c-xp-bar, .c-progress-track
+// Estilos específicos de página ficam nos <style scoped> de cada componente.
+// =============================================================================
+@use '../variables' as *;
+@use '../mixins'    as *;
+@use '../colors'   as *;
+
+// ── Carta colecionável (holográfica) ──────────────────────────────────────────
+.c-card-collectible {
+  position: relative;
+  border-radius: $radius-lg;
+  overflow: hidden;
+  transition: transform $dur-base $ease-out, box-shadow $dur-base $ease-out;
+  transform-style: preserve-3d;
+  will-change: transform;
+  cursor: default;
+
+  &::before {
+    // Camada holográfica — visível no hover via JS tilt
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      rgba(255, 255, 255, 0.08) 45%,
+      rgba(255, 255, 255, 0.18) 50%,
+      rgba(255, 255, 255, 0.08) 55%,
+      transparent 60%
+    );
+    mix-blend-mode: overlay;
+    opacity: 0;
+    transition: opacity $dur-slow $ease-out;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  &:hover::before {
+    opacity: 1;
+  }
+
+  // Raridade → borda colorida
+  &--common    { border: 1px solid rgba(181, 187, 208, 0.40); }
+  &--rare      { border: 1px solid rgba(0,   217, 192, 0.55); box-shadow: 0 0 16px rgba(0, 217, 192, 0.20); }
+  &--epic      { border: 1px solid rgba(108,  92, 231, 0.65); box-shadow: 0 0 20px rgba(108, 92, 231, 0.30); }
+  &--legendary {
+    border: 1px solid rgba(255, 209, 102, 0.80);
+    box-shadow: 0 0 24px rgba(255, 209, 102, 0.40), 0 0 8px rgba(255, 209, 102, 0.20);
+    animation: legendary-pulse 3s ease-in-out infinite;
+  }
+}
+
+@keyframes legendary-pulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(255, 209, 102, 0.40), 0 0 8px rgba(255, 209, 102, 0.20); }
+  50%       { box-shadow: 0 0 36px rgba(255, 209, 102, 0.65), 0 0 16px rgba(255, 209, 102, 0.40); }
+}
+
+// ── Badge tile ────────────────────────────────────────────────────────────────
+.c-badge-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-3;
+  border-radius: $radius-md;
+  @include glass;
+  border: 1px solid var(--border-subtle);
+  transition: transform $dur-fast $ease-out, border-color $dur-fast $ease-out;
+  cursor: default;
+
+  &:hover { transform: translateY(-2px); }
+
+  &__icon { font-size: 1.75rem; line-height: 1; }
+  &__name { font-size: 0.7rem; font-weight: 600; text-align: center; color: var(--text-secondary); }
+
+  // Raridade → borda colorida sutil
+  &--rare      { border-color: rgba(0,   217, 192, 0.35); }
+  &--epic      { border-color: rgba(108,  92, 231, 0.45); }
+  &--legendary { border-color: rgba(255, 209, 102, 0.55); }
+}
+
+// ── XP bar ────────────────────────────────────────────────────────────────────
+.c-xp-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: $radius-pill;
+  overflow: hidden;
+
+  &__fill {
+    height: 100%;
+    border-radius: $radius-pill;
+    background: var(--gradient-violet);
+    transition: width $dur-slower $ease-out;
+  }
+}
+
+// ── Progress track (para módulos/trilhas) ─────────────────────────────────────
+.c-progress-track {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: $radius-pill;
+  overflow: hidden;
+
+  &__fill {
+    height: 100%;
+    border-radius: $radius-pill;
+    background: linear-gradient(90deg, $brand-secondary 0%, $brand-cyber 100%);
+    transition: width $dur-slower $ease-out;
+  }
+}
