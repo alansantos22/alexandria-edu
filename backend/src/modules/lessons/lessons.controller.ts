@@ -31,10 +31,26 @@ export class LessonsController {
     return this.lessonsService.listForStudent();
   }
 
+  @Get('progress')
+  @UseGuards(ActiveUserGuard)
+  async getProgress(@CurrentUser() user: AuthenticatedUser) {
+    return this.lessonsService.getProgress(user.id);
+  }
+
   @Get(':id')
   @UseGuards(ActiveUserGuard)
   async getById(@Param('id', ParseUUIDPipe) id: string) {
     return this.lessonsService.getById(id);
+  }
+
+  @Post(':id/complete')
+  @UseGuards(ActiveUserGuard)
+  @HttpCode(HttpStatus.OK)
+  async complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.lessonsService.completeLesson(user.id, id);
   }
 
   @Post()

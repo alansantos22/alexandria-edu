@@ -43,6 +43,18 @@ export class User {
   @Column({ name: 'last_login_at', type: 'timestamp', nullable: true })
   lastLoginAt: Date | null;
 
+  @Column({ name: 'xp', type: 'int', default: 0 })
+  xp: number;
+
+  @Column({ name: 'level', type: 'int', default: 1 })
+  level: number;
+
+  @Column({ name: 'streak_days', type: 'int', default: 0 })
+  streakDays: number;
+
+  @Column({ name: 'last_activity_at', type: 'timestamp', nullable: true })
+  lastActivityAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
