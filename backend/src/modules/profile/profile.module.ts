@@ -10,6 +10,8 @@ import { LearningModule }  from './entities/learning-module.entity';
 
 import { Lesson }              from '@/modules/lessons/entities/lesson.entity';
 import { UserLessonProgress }  from '@/modules/lessons/entities/user-lesson-progress.entity';
+import { MarketplaceItem }     from '@/modules/marketplace/entities/marketplace-item.entity';
+import { UserProfileCustomization } from '@/modules/marketplace/entities/user-profile-customization.entity';
 
 import { UsersModule }    from '@/modules/users/users.module';
 import { ProfileRepository } from './profile.repository';
@@ -21,6 +23,7 @@ import { ProfileController } from './profile.controller';
     TypeOrmModule.forFeature([
       Badge, UserBadge, Card, UserCard, Track, LearningModule,
       Lesson, UserLessonProgress,
+      MarketplaceItem, UserProfileCustomization,
     ]),
     UsersModule,
   ],

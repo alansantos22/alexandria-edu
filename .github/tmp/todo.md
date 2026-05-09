@@ -4,6 +4,35 @@
 **Sessão:** profile-public-view  
 **Status Geral:** ✅ CONCLUÍDO
 
+---
+
+# TODO - Perfil Personalizável (Wallpaper, Frame, Bio)
+
+**Data/Hora:** 2026-05-09
+**Status Geral:** ✅ CONCLUÍDO
+
+## 🎯 OBJETIVO
+Perfil personalizável como na Steam: wallpaper, frame do avatar, bio. Itens vendidos no marketplace.
+
+## ✅ CHECKLIST COMPLETO
+- [x] Migration 004: `bio` + seed de 8 wallpapers e 6 frames CSS-based
+- [x] Entity `UserProfileCustomization` — campo `bio` adicionado
+- [x] DTOs: `ProfileCustomizationDto`, `UpdateBioDto`, `EquipItemDto` com null
+- [x] `ProfileRepository`: `getCustomizationWithItems()` + `updateBio()`
+- [x] `ProfileModule`: registra `MarketplaceItem` e `UserProfileCustomization`
+- [x] `ProfileService`: inclui `customization` na resposta + `updateBio()`
+- [x] `ProfileController`: `PATCH /users/me/bio`
+- [x] `MarketplaceRepository`: `unequipSlot()` adicionado
+- [x] `MarketplaceService`: `equipItem(null, type)` para desequipar
+- [x] `ProfileCustomizationModal.vue` (NOVO): 3 abas + preview ao vivo
+- [x] `ProfileHeader.vue`: frame dinâmico + exibe bio
+- [x] `Profile.vue`: wallpaper de fundo + abre modal
+- [x] `profile.service.js`: `updateBio()`
+- [x] `marketplace.service.js`: `equipItem(null, type)`
+
+## 📋 PARA ATIVAR: executar `004-profile-bio.sql` no banco
+
+
 ## 🎯 OBJETIVO PRINCIPAL
 Criar a tela de perfil público `/u/:username` com layout Bento Box exibindo:
 nível/XP, streak, cartas colecionáveis, medalhas, trilhas/módulos/aulas concluídos e estatísticas.

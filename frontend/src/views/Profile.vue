@@ -1,5 +1,8 @@
 <template>
-  <div>
+  <div class="p-profile-page" :style="wallpaperStyle">
+    <!-- Overlay suave sobre o wallpaper para manter legibilidade -->
+    <div v-if="wallpaperStyle.background" class="p-profile-page__overlay" />
+
     <!-- Appbar reutilizando padrão do projeto -->
     <header class="c-appbar">
       <div class="c-appbar__brand">
@@ -38,31 +41,32 @@
 
       <!-- Perfil carregado -->
       <template v-else-if="profile">
-        <ProfileHeader :user="profile.user" class="a-fade-in-up" />
+        <ProfileHeader
+          :user="profile.user"
+          :customization="profile.customization"
+          class="a-fade-in-up"
+          @edit="showCustomizeModal = true"
+        />
 
         <!-- Bento grid principal -->
         <section class="c-bento p-profile__grid a-fade-in-up">
 
-          <!-- Bloco Stats — pequeno, canto superior esquerdo -->
           <ShowcaseStats
             :stats="profile.stats"
             :user="profile.user"
             class="c-bento__cell p-profile__cell--stats"
           />
 
-          <!-- Bloco Badges — médio, centro -->
           <ShowcaseBadges
             :badges="profile.badges"
             class="c-bento__cell p-profile__cell--badges"
           />
 
-          <!-- Bloco Cards — largo, lateral direita (span 2 linhas no desktop) -->
           <ShowcaseCards
             :cards="profile.cards"
             class="c-bento__cell p-profile__cell--cards"
           />
 
-          <!-- Bloco Trilhas — largura total inferior -->
           <ShowcaseTracks
             :tracks="profile.tracks"
             class="c-bento__cell p-profile__cell--tracks"
@@ -70,28 +74,59 @@
         </section>
       </template>
     </main>
+
+    <!-- Modal de personalização -->
+    <ProfileCustomizationModal
+      v-if="showCustomizeModal && profile"
+      :profile="profile"
+      :avatar-url="profile.user.avatarUrl"
+      @close="showCustomizeModal = false"
+      @updated="handleProfileUpdated"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Sparkles, ArrowLeft } from 'lucide-vue-next'
 
 import { getProfile } from '@/core/services/profile.service'
-import ProfileHeader    from '@/components/profile/ProfileHeader.vue'
-import ShowcaseStats    from '@/components/profile/ShowcaseStats.vue'
-import ShowcaseBadges   from '@/components/profile/ShowcaseBadges.vue'
-import ShowcaseCards    from '@/components/profile/ShowcaseCards.vue'
-import ShowcaseTracks   from '@/components/profile/ShowcaseTracks.vue'
+import ProfileHeader               from '@/components/profile/ProfileHeader.vue'
+import ShowcaseStats               from '@/components/profile/ShowcaseStats.vue'
+import ShowcaseBadges              from '@/components/profile/ShowcaseBadges.vue'
+import ShowcaseCards               from '@/components/profile/ShowcaseCards.vue'
+import ShowcaseTracks              from '@/components/profile/ShowcaseTracks.vue'
+import ProfileCustomizationModal   from '@/components/profile/ProfileCustomizationModal.vue'
 
 const route  = useRoute()
 const router = useRouter()
 
-const profile  = ref(null)
-const loading  = ref(true)
-const notFound = ref(false)
-const error    = ref(false)
+const profile           = ref(null)
+const loading           = ref(true)
+const notFound          = ref(false)
+const error             = ref(false)
+const showCustomizeModal = ref(false)
+
+// ─── Wallpaper dinâmico ───────────────────────────────────────────────────────
+
+const wallpaperStyle = computed(() => {
+  const wp = profile.value?.customization?.wallpaper
+  if (!wp?.imageUrl) return {}
+  if (wp.imageUrl.startsWith('css:')) {
+    return { background: wp.imageUrl.slice(4) }
+  }
+  // Imagem real: background-attachment: fixed cria o efeito parallax (a imagem fica fixa
+  // enquanto o conteúdo rola por cima — diferente de position:fixed)
+  return {
+    backgroundImage:      `url(${wp.imageUrl})`,
+    backgroundSize:       'cover',
+    backgroundPosition:   'center',
+    backgroundAttachment: 'fixed',
+  }
+})
+
+// ─── Carregar perfil ──────────────────────────────────────────────────────────
 
 onMounted(async () => {
   const token = localStorage.getItem('token')
@@ -107,9 +142,48 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+// ─── Callback após customização ───────────────────────────────────────────────
+
+function handleProfileUpdated({ type, item, value }) {
+  if (!profile.value?.customization) return
+
+  if (type === 'bio') {
+    profile.value.customization.bio = value || null
+    return
+  }
+
+  // Atualiza o slot local sem nova requisição ao servidor
+  profile.value.customization[type] = item
+    ? { id: item.id, name: item.name, type: item.type, imageUrl: item.imageUrl, rarity: item.rarity }
+    : null
+}
 </script>
 
 <style scoped lang="scss">
+.p-profile-page {
+  position: relative;
+  min-height: 100vh;
+  background-attachment: fixed;
+  transition: background $dur-slow $ease-out;
+
+  &__overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(7, 9, 26, 0.55);
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  // Garantir que o conteúdo fica acima do overlay
+  > .c-appbar,
+  > .l-container {
+    position: relative;
+    z-index: 1;
+  }
+}
+
 .p-profile {
   &__loading {
     display: flex;
@@ -146,7 +220,6 @@ onMounted(async () => {
   &__not-found-icon { font-size: 3rem; }
 
   &__grid {
-    // Override bento default para layout assimétrico do perfil
     grid-template-columns: 1fr;
     grid-auto-rows: auto;
 
@@ -159,23 +232,14 @@ onMounted(async () => {
     }
   }
 
-  // Stats: ocupa 1 coluna, 1 linha
-  &__cell--stats {
-    @include breakpoint(md) { grid-column: span 1; }
-  }
+  &__cell--stats  { @include breakpoint(md) { grid-column: span 1; } }
+  &__cell--badges { @include breakpoint(md) { grid-column: span 1; } }
 
-  // Badges: ocupa 1 coluna, 1 linha
-  &__cell--badges {
-    @include breakpoint(md) { grid-column: span 1; }
-  }
-
-  // Cards: ocupa 1 coluna, 2 linhas (fica na lateral direita)
   &__cell--cards {
     @include breakpoint(md) { grid-column: span 1; grid-row: span 2; }
     @include breakpoint(lg) { grid-column: 3; grid-row: 1 / span 2; }
   }
 
-  // Trilhas: largura total (exceto a coluna de cards no desktop)
   &__cell--tracks {
     @include breakpoint(md) { grid-column: span 2; }
     @include breakpoint(lg) { grid-column: 1 / span 2; }
@@ -186,3 +250,4 @@ onMounted(async () => {
   to { transform: rotate(360deg); }
 }
 </style>
+

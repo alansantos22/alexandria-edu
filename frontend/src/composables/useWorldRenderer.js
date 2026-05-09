@@ -2,29 +2,45 @@ import { ref } from 'vue'
 import {
   WebGLRenderer, Scene, OrthographicCamera, PerspectiveCamera, Color, FogExp2,
   AmbientLight, DirectionalLight, HemisphereLight,
-  BoxGeometry, PlaneGeometry, ConeGeometry, CylinderGeometry,
-  MeshLambertMaterial,
+  BoxGeometry, PlaneGeometry, ConeGeometry, CylinderGeometry, SphereGeometry,
+  MeshLambertMaterial, ShaderMaterial,
   InstancedMesh, Mesh, Group,
   Matrix4, Vector3,
+  Points, PointsMaterial, BufferGeometry, Float32BufferAttribute,
+  BackSide,
 } from 'three'
 import { SimplexNoise } from 'three/addons/math/SimplexNoise.js'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const WORLD_SCALE    = 80
-const PLOT_RADIUS    = 13
-const ROAD_WIDTH     = 7        // total asphalt (2 lanes)
-const SIDEWALK_W     = 2.5
-const CURB_W         = 0.35
-const HALF_ROAD_TOTAL = ROAD_WIDTH / 2 + CURB_W + SIDEWALK_W  // 6.35
-// Cities sit in the block corner, clearly off the road
-const CORNER_OFFSET  = Math.ceil(HALF_ROAD_TOTAL + 3 + PLOT_RADIUS)  // 23
-const ROAD_REACH     = 1800     // road extends this far from origin
-const ROAD_GRID_N    = 5        // roads at n = -5 … +5 per axis
-const MAX_TREES      = 1200
-const TERRAIN_HALF   = 420
-const ENTER_DIST     = 6
-const DASH_LEN       = 4
-const GAP_LEN        = 6
+const WORLD_SCALE     = 80
+const PLOT_RADIUS     = 13
+const ROAD_WIDTH      = 7
+const SIDEWALK_W      = 2.5
+const CURB_W          = 0.35
+const HALF_ROAD_TOTAL = ROAD_WIDTH / 2 + CURB_W + SIDEWALK_W
+const CORNER_OFFSET   = Math.ceil(HALF_ROAD_TOTAL + 3 + PLOT_RADIUS)
+const ROAD_REACH      = 1800
+const ROAD_GRID_N     = 5
+const MAX_TREES       = 1200
+const TERRAIN_HALF    = 420
+const ENTER_DIST      = 6
+const DASH_LEN        = 4
+const GAP_LEN         = 6
+
+const DAY_SPEED = 1 / 180 // full cycle in 3 real minutes
+
+// t: 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
+const PHASES = [
+  { t: 0.00, top: new Color(0x04081a), bot: new Color(0x060c20), sun: new Color(0xb0baee), fog: new Color(0x020510), aI: 0.09, hI: 0.04, sI: 0.05, fd: 0.006,  st: 0.90 },
+  { t: 0.20, top: new Color(0x0d0c22), bot: new Color(0x3d1a2a), sun: new Color(0xff6622), fog: new Color(0x1a0b10), aI: 0.22, hI: 0.12, sI: 0.28, fd: 0.005,  st: 0.45 },
+  { t: 0.25, top: new Color(0x18103e), bot: new Color(0xff7744), sun: new Color(0xffaa44), fog: new Color(0x441820), aI: 0.42, hI: 0.22, sI: 0.62, fd: 0.0045, st: 0.00 },
+  { t: 0.35, top: new Color(0x2a5cbf), bot: new Color(0x88c8e8), sun: new Color(0xfff4d6), fog: new Color(0x70b8d4), aI: 0.65, hI: 0.32, sI: 0.88, fd: 0.0035, st: 0.00 },
+  { t: 0.50, top: new Color(0x3868d4), bot: new Color(0x87ceeb), sun: new Color(0xfff8e8), fog: new Color(0x87ceeb), aI: 0.78, hI: 0.38, sI: 1.00, fd: 0.0028, st: 0.00 },
+  { t: 0.65, top: new Color(0x2a5cbf), bot: new Color(0x88c8e8), sun: new Color(0xfff4d6), fog: new Color(0x70b8d4), aI: 0.65, hI: 0.32, sI: 0.88, fd: 0.0035, st: 0.00 },
+  { t: 0.75, top: new Color(0x180f38), bot: new Color(0xff6622), sun: new Color(0xff9933), fog: new Color(0x441820), aI: 0.42, hI: 0.22, sI: 0.62, fd: 0.0045, st: 0.00 },
+  { t: 0.80, top: new Color(0x0e0b22), bot: new Color(0x3d1520), sun: new Color(0xff4411), fog: new Color(0x180a10), aI: 0.22, hI: 0.12, sI: 0.28, fd: 0.005,  st: 0.45 },
+  { t: 1.00, top: new Color(0x04081a), bot: new Color(0x060c20), sun: new Color(0xb0baee), fog: new Color(0x020510), aI: 0.09, hI: 0.04, sI: 0.05, fd: 0.006,  st: 0.90 },
+]
 
 const noise = new SimplexNoise()
 
@@ -37,17 +53,20 @@ function seededRng(seed) {
   }
 }
 
-// Flat world — no elevation
 function groundY() { return 0 }
 
-// Visual world position of a city plot (beside road, not on it)
+// Centro dos tiles iniciais (0,0)-(1,1) do grid 5×5
 function cityVisualPos(city) {
+  const tileSize = (WORLD_SCALE - 2 * HALF_ROAD_TOTAL) / 5
+  const offset   = HALF_ROAD_TOTAL + tileSize  // centro do bloco 2×2
   return new Vector3(
-    city.worldX * WORLD_SCALE + CORNER_OFFSET,
+    city.worldX * WORLD_SCALE + offset,
     0,
-    city.worldZ * WORLD_SCALE + CORNER_OFFSET,
+    city.worldZ * WORLD_SCALE + offset,
   )
 }
+
+function _lerp(a, b, t) { return a + (b - a) * t }
 
 // ── Composable ────────────────────────────────────────────────────────────────
 export function useWorldRenderer(canvasRef) {
@@ -56,7 +75,18 @@ export function useWorldRenderer(canvasRef) {
   let lastTime   = 0
   let cameraMode = 0
 
-  const keysDown    = new Set()
+  // Day/night state
+  let dayTime    = 0.30
+  let skyMesh    = null
+  let starPoints = null
+  let ambLight   = null
+  let hemiLight  = null
+  let sunLight   = null
+
+  const _phase   = { top: new Color(), bot: new Color(), sun: new Color(), fog: new Color(), aI: 0, hI: 0, sI: 0, fd: 0, st: 0 }
+  const _bgColor = new Color()
+
+  const keysDown     = new Set()
   const roadSegments = []
   const ambientCars  = []
 
@@ -86,27 +116,8 @@ export function useWorldRenderer(canvasRef) {
   const playerPos     = ref({ x: 0, z: 0 })
   const playerMode    = ref('walking')
   const cameraModeRef = ref(0)
+  const timeOfDay     = ref('07:12')
 
-  // ── Init ──────────────────────────────────────────────────────────────────────
-  function init() {
-    const canvas = canvasRef.value
-    const W = canvas.clientWidth, H = canvas.clientHeight
-
-    renderer = new WebGLRenderer({ canvas, antialias: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(W, H, false)
-    renderer.shadowMap.enabled = true
-
-    scene = new Scene()
-    scene.background = new Color(0x0a1808)
-    scene.fog = new FogExp2(0x0a1808, 0.004)
-
-    _buildCameras(W, H)
-    _buildLights()
-    _attachControls(canvas)
-    _startLoop()
-    ready.value = true
-  }
 
   function _buildCameras(W, H) {
     const a = W / H
@@ -120,20 +131,142 @@ export function useWorldRenderer(canvasRef) {
   }
 
   function _buildLights() {
-    scene.add(new AmbientLight(0xffffff, 0.78))
-    scene.add(new HemisphereLight(0xb8d4a0, 0x2a4a1a, 0.38))
-    const sun = new DirectionalLight(0xfff4d6, 1.0)
-    sun.position.set(40, 80, 30)
-    sun.castShadow = true
-    sun.shadow.mapSize.set(2048, 2048)
-    Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150 })
-    scene.add(sun)
+    ambLight = new AmbientLight(0xffffff, 0.78)
+    scene.add(ambLight)
+    hemiLight = new HemisphereLight(0xb8d4a0, 0x2a4a1a, 0.38)
+    scene.add(hemiLight)
+    sunLight = new DirectionalLight(0xfff4d6, 1.0)
+    sunLight.position.set(40, 80, 30)
+    sunLight.castShadow = true
+    sunLight.shadow.mapSize.set(2048, 2048)
+    Object.assign(sunLight.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150 })
+    scene.add(sunLight)
+  }
+
+  // ── Sky dome ──────────────────────────────────────────────────────────────────
+  function _buildSky() {
+    const mat = new ShaderMaterial({
+      side: BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uTopColor: { value: new Color(0x04081a) },
+        uBotColor: { value: new Color(0x060c20) },
+        uSunDir:   { value: new Vector3(0, 1, 0.3) },
+        uSunColor: { value: new Color(0xffffff) },
+        uSunSize:  { value: 0.9994 },
+      },
+      vertexShader: /* glsl */`
+        varying vec3 vDir;
+        void main() {
+          vDir = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform vec3  uTopColor;
+        uniform vec3  uBotColor;
+        uniform vec3  uSunDir;
+        uniform vec3  uSunColor;
+        uniform float uSunSize;
+        varying vec3 vDir;
+        void main() {
+          vec3 d = normalize(vDir);
+          float h = pow(max(d.y, 0.0), 0.5);
+          vec3 sky = mix(uBotColor, uTopColor, h);
+          float cosA = dot(d, normalize(uSunDir));
+          float disc = smoothstep(uSunSize - 0.0008, uSunSize + 0.0008, cosA);
+          float halo = smoothstep(uSunSize - 0.07, uSunSize - 0.002, cosA) * 0.32;
+          sky += uSunColor * disc + uSunColor * halo * 0.5;
+          gl_FragColor = vec4(sky, 1.0);
+        }
+      `,
+    })
+    skyMesh = new Mesh(new SphereGeometry(700, 32, 16), mat)
+    skyMesh.renderOrder = -1
+    scene.add(skyMesh)
+  }
+
+  function _buildStars() {
+    const count = 2000
+    const pos   = new Float32Array(count * 3)
+    const rng   = seededRng(0x57a715)
+    for (let i = 0; i < count; i++) {
+      const theta = rng() * Math.PI * 2
+      const phi   = Math.acos(2 * rng() - 1)
+      const r     = 650
+      pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta)
+      pos[i * 3 + 1] = Math.abs(r * Math.sin(phi) * Math.sin(theta))
+      pos[i * 3 + 2] = r * Math.cos(phi)
+    }
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new Float32BufferAttribute(pos, 3))
+    const mat = new PointsMaterial({ color: 0xffffff, size: 1.4, sizeAttenuation: false, transparent: true, opacity: 0 })
+    starPoints = new Points(geo, mat)
+    starPoints.renderOrder = -1
+    scene.add(starPoints)
+  }
+
+  // ── Day/night cycle ───────────────────────────────────────────────────────────
+  function _getDayPhase(t) {
+    let i = 0
+    while (i < PHASES.length - 2 && PHASES[i + 1].t <= t) i++
+    const a = PHASES[i], b = PHASES[i + 1]
+    const f = (b.t > a.t) ? (t - a.t) / (b.t - a.t) : 0
+    _phase.top.copy(a.top).lerp(b.top, f)
+    _phase.bot.copy(a.bot).lerp(b.bot, f)
+    _phase.sun.copy(a.sun).lerp(b.sun, f)
+    _phase.fog.copy(a.fog).lerp(b.fog, f)
+    _phase.aI = _lerp(a.aI, b.aI, f)
+    _phase.hI = _lerp(a.hI, b.hI, f)
+    _phase.sI = _lerp(a.sI, b.sI, f)
+    _phase.fd = _lerp(a.fd, b.fd, f)
+    _phase.st = _lerp(a.st, b.st, f)
+  }
+
+  function _updateDayNight(dt) {
+    dayTime = (dayTime + DAY_SPEED * dt) % 1
+    _getDayPhase(dayTime)
+
+    // Sun orbits: dayTime=0.25→east horizon, 0.5→zenith, 0.75→west horizon
+    const sa  = (dayTime - 0.25) * Math.PI * 2
+    const sx  = Math.cos(sa), sy = Math.sin(sa), sz = 0.25
+    const isSun = sy > -0.1
+    const dx = isSun ? sx : -sx
+    const dy = isSun ? sy : -sy
+    const dz = isSun ? sz : -sz
+
+    if (skyMesh) {
+      const u = skyMesh.material.uniforms
+      u.uTopColor.value.copy(_phase.top)
+      u.uBotColor.value.copy(_phase.bot)
+      u.uSunDir.value.set(dx, dy, dz)
+      u.uSunColor.value.copy(_phase.sun)
+    }
+
+    _bgColor.copy(_phase.fog)
+    scene.fog.color.copy(_phase.fog)
+    scene.fog.density = _phase.fd
+
+    if (ambLight)  ambLight.intensity  = _phase.aI
+    if (hemiLight) hemiLight.intensity = _phase.hI
+    if (sunLight) {
+      sunLight.intensity = _phase.sI
+      sunLight.color.copy(_phase.sun)
+      sunLight.position.set(dx * 150, Math.max(dy, 0.12) * 150, dz * 150)
+    }
+
+    if (starPoints) starPoints.material.opacity = _phase.st
+
+    const h = Math.floor(dayTime * 24)
+    const m = Math.floor(((dayTime * 24) % 1) * 60)
+    timeOfDay.value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
   // ── World generation ───────────────────────────────────────────────────────────
   function loadWorld(cities) {
     _generateTerrain()
-    _generateRoads()           // independent of cities
+    _generateRoads()
     _generateVegetation(cities)
     _generateCityPlots(cities)
     _spawnAmbientCars()
@@ -142,7 +275,6 @@ export function useWorldRenderer(canvasRef) {
   }
 
   function _generateTerrain() {
-    // Flat ground — no vertex displacement
     const mesh = new Mesh(
       new PlaneGeometry(TERRAIN_HALF * 2, TERRAIN_HALF * 2),
       new MeshLambertMaterial({ color: 0x3d7a28 }),
@@ -165,7 +297,6 @@ export function useWorldRenderer(canvasRef) {
     const roadCount     = ROAD_GRID_N * 2 + 1
     const dashesPerRoad = Math.floor(len / PERIOD)
 
-    // InstancedMesh for dashes — one per axis direction
     const zDashInst = new InstancedMesh(
       new BoxGeometry(0.18, 0.03, DASH_LEN), dashMat, roadCount * dashesPerRoad,
     )
@@ -178,24 +309,20 @@ export function useWorldRenderer(canvasRef) {
     for (let n = -ROAD_GRID_N; n <= ROAD_GRID_N; n++) {
       const coord = n * WORLD_SCALE
 
-      // ── Z-axis road (runs along Z at x=coord) ───────────────────────────────
       const zRoad = new Mesh(new BoxGeometry(ROAD_WIDTH, 0.015, len), roadMat)
       zRoad.position.set(coord, 0.008, 0)
       zRoad.receiveShadow = true
       scene.add(zRoad)
 
-      // ── X-axis road (runs along X at z=coord) ── slightly higher for intersect ─
       const xRoad = new Mesh(new BoxGeometry(len, 0.015, ROAD_WIDTH), roadMat)
       xRoad.position.set(0, 0.014, coord)
       xRoad.receiveShadow = true
       scene.add(xRoad)
 
-      // Sidewalks + curbs for both axes
       ;[-1, 1].forEach(side => {
         const curbOff = ROAD_WIDTH / 2 + CURB_W / 2
         const swOff   = ROAD_WIDTH / 2 + CURB_W + SIDEWALK_W / 2
 
-        // Z-axis road sides
         const zCurb = new Mesh(new BoxGeometry(CURB_W, 0.1, len), curbMat)
         zCurb.position.set(coord + side * curbOff, 0.05, 0)
         scene.add(zCurb)
@@ -205,7 +332,6 @@ export function useWorldRenderer(canvasRef) {
         zSw.receiveShadow = true
         scene.add(zSw)
 
-        // X-axis road sides
         const xCurb = new Mesh(new BoxGeometry(len, 0.1, CURB_W), curbMat)
         xCurb.position.set(0, 0.055, coord + side * curbOff)
         scene.add(xCurb)
@@ -216,14 +342,12 @@ export function useWorldRenderer(canvasRef) {
         scene.add(xSw)
       })
 
-      // Center dashes — instanced
       for (let d = 0; d < dashesPerRoad; d++) {
         const t = -ROAD_REACH + d * PERIOD + PERIOD / 2
         m.setPosition(coord, 0.025, t); zDashInst.setMatrixAt(zIdx++, m)
         m.setPosition(t, 0.03, coord);  xDashInst.setMatrixAt(xIdx++, m)
       }
 
-      // Store for ambient cars + _nearRoad
       roadSegments.push(
         { axis: 'z', coord, from: new Vector3(coord, 0, -ROAD_REACH), to: new Vector3(coord, 0, ROAD_REACH), length: ROAD_REACH * 2 },
         { axis: 'x', coord, from: new Vector3(-ROAD_REACH, 0, coord), to: new Vector3(ROAD_REACH, 0, coord), length: ROAD_REACH * 2 },
@@ -257,28 +381,48 @@ export function useWorldRenderer(canvasRef) {
 
     const mm = new Matrix4()
     placed.forEach(({ x, z, s }, i) => {
-      mm.makeScale(s, s, s); mm.setPosition(x, 0.5 * s, z);       trunkInst.setMatrixAt(i, mm)
-      mm.makeScale(s, s, s); mm.setPosition(x, 1.65 * s, z);      coneInst.setMatrixAt(i, mm)
+      mm.makeScale(s, s, s); mm.setPosition(x, 0.5 * s, z);  trunkInst.setMatrixAt(i, mm)
+      mm.makeScale(s, s, s); mm.setPosition(x, 1.65 * s, z); coneInst.setMatrixAt(i, mm)
     })
     trunkInst.instanceMatrix.needsUpdate = coneInst.instanceMatrix.needsUpdate = true
     scene.add(trunkInst, coneInst)
   }
 
   function _generateCityPlots(cities) {
+    // Grid 5×5 — cada tile ocupa 1/5 do espaço utilizável entre estradas
+    const USABLE    = WORLD_SCALE - 2 * HALF_ROAD_TOTAL  // ~67.3 unidades
+    const TILE_SIZE = USABLE / 5                           // ~13.46 unidades
+
     const platMat   = new MeshLambertMaterial({ color: 0x1a1a2e })
     const borderMat = new MeshLambertMaterial({ color: 0x6c5ce7 })
-    const size      = PLOT_RADIUS * 2
+    const tileGeo   = new BoxGeometry(TILE_SIZE, 0.18, TILE_SIZE)
+    const edgeGeo   = new BoxGeometry(TILE_SIZE + 0.4, 0.08, TILE_SIZE + 0.4)
 
     cities.forEach(city => {
-      const vp = cityVisualPos(city)
-      const plat = new Mesh(new BoxGeometry(size, 0.18, size), platMat)
-      plat.position.set(vp.x, 0.09, vp.z)
-      plat.receiveShadow = true
-      scene.add(plat)
+      const tiles    = city.landTiles ?? []
+      const ownedSet = new Set(tiles.map(t => `${t.x},${t.z}`))
 
-      const border = new Mesh(new BoxGeometry(size + 0.5, 0.1, size + 0.5), borderMat)
-      border.position.set(vp.x, 0.05, vp.z)
-      scene.add(border)
+      // Renderiza cada tile possuído como uma plataforma escura
+      tiles.forEach(({ x, z }) => {
+        const wx = city.worldX * WORLD_SCALE + HALF_ROAD_TOTAL + x * TILE_SIZE + TILE_SIZE / 2
+        const wz = city.worldZ * WORLD_SCALE + HALF_ROAD_TOTAL + z * TILE_SIZE + TILE_SIZE / 2
+
+        const plat = new Mesh(tileGeo, platMat)
+        plat.position.set(wx, 0.09, wz)
+        plat.receiveShadow = true
+        scene.add(plat)
+
+        // Borda roxa apenas nos lados sem vizinho possuído (outline orgânico)
+        const exposed = [
+          [x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1],
+        ].some(([nx, nz]) => !ownedSet.has(`${nx},${nz}`))
+
+        if (exposed) {
+          const edge = new Mesh(edgeGeo, borderMat)
+          edge.position.set(wx, 0.04, wz)
+          scene.add(edge)
+        }
+      })
     })
   }
 
@@ -287,7 +431,6 @@ export function useWorldRenderer(canvasRef) {
     const carGeo  = new BoxGeometry(1.5, 0.65, 2.8)
     const rng     = seededRng(0xf00dcafe)
 
-    // Only spawn cars on roads near the world origin (feels populated, avoids clutter)
     const nearSegs = roadSegments.filter(s => Math.abs(s.coord) <= WORLD_SCALE)
 
     nearSegs.forEach((seg, si) => {
@@ -369,6 +512,7 @@ export function useWorldRenderer(canvasRef) {
       animId = requestAnimationFrame(tick)
       const dt = Math.min((now - lastTime) / 1000, 0.05)
       lastTime = now
+      _updateDayNight(dt)
       if (mode === 'walking') _updateNpc(dt)
       else                    _updateVehicle(dt)
       _updateAmbientCars(dt)
@@ -464,6 +608,10 @@ export function useWorldRenderer(canvasRef) {
     camera.position.copy(camPos)
     camera.lookAt(camLookAt)
 
+    // Keep sky centered on camera
+    if (skyMesh)    skyMesh.position.copy(camPos)
+    if (starPoints) starPoints.position.copy(camPos)
+
     if (cameraMode !== 0 && canvasRef.value) {
       perspCamera.aspect = canvasRef.value.clientWidth / canvasRef.value.clientHeight
       perspCamera.updateProjectionMatrix()
@@ -495,8 +643,8 @@ export function useWorldRenderer(canvasRef) {
     const margin = HALF_ROAD_TOTAL + 2
     for (let n = -ROAD_GRID_N; n <= ROAD_GRID_N; n++) {
       const c = n * WORLD_SCALE
-      if (Math.abs(x - c) < margin) return true   // Z-axis road
-      if (Math.abs(z - c) < margin) return true   // X-axis road
+      if (Math.abs(x - c) < margin) return true
+      if (Math.abs(z - c) < margin) return true
     }
     return false
   }
@@ -573,8 +721,31 @@ export function useWorldRenderer(canvasRef) {
     renderer?.dispose()
   }
 
+  // ── Init ──────────────────────────────────────────────────────────────────────
+  function init() {
+    const canvas = canvasRef.value
+    const W = canvas.clientWidth, H = canvas.clientHeight
+
+    renderer = new WebGLRenderer({ canvas, antialias: true })
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(W, H, false)
+    renderer.shadowMap.enabled = true
+
+    scene = new Scene()
+    scene.background = _bgColor
+    scene.fog = new FogExp2(0x000000, 0.004)
+
+    _buildCameras(W, H)
+    _buildLights()
+    _buildSky()
+    _buildStars()
+    _attachControls(canvas)
+    _startLoop()
+    ready.value = true
+  }
+
   return {
-    ready, nearbyCity, enterCityZone, playerPos, playerMode, cameraModeRef,
+    ready, nearbyCity, enterCityZone, playerPos, playerMode, cameraModeRef, timeOfDay,
     init, loadWorld, checkNearbyCities, resize, dispose,
   }
 }

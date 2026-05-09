@@ -16,9 +16,13 @@ export const marketplaceService = {
     return api.get('/marketplace/inventory').then(r => r.data)
   },
 
-  /** Equipa um item (aplica ao slot correspondente) */
-  equipItem(itemId) {
-    return api.put('/marketplace/equip', { itemId }).then(r => r.data)
+  /**
+   * Equipa um item ou desequipa um slot.
+   * @param {string|null} itemId - null para desequipar
+   * @param {'avatar'|'wallpaper'|'badge'|'frame'} [type] - obrigatório quando itemId é null
+   */
+  equipItem(itemId, type) {
+    return api.put('/marketplace/equip', { itemId: itemId ?? null, type }).then(r => r.data)
   },
 
   /** Perfil público de um usuário */

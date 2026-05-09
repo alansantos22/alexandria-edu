@@ -10,6 +10,7 @@ import { throttlerConfig } from './config/throttler.config';
 
 import { AuthModule } from './core/auth/auth.module';
 import { SecurityModule } from './core/security/security.module';
+import { DatabaseModule } from './core/database/database.module';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -18,6 +19,8 @@ import { EconomyModule }      from './modules/economy/economy.module';
 import { MarketplaceModule }  from './modules/marketplace/marketplace.module';
 import { CityModule }         from './modules/city/city.module';
 import { ProfileModule }      from './modules/profile/profile.module';
+import { LandModule }         from './modules/land/land.module';
+import { AdminModule }        from './modules/admin/admin.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -32,6 +35,7 @@ import { HealthController } from './common/health/health.controller';
     TypeOrmModule.forRootAsync({ useFactory: databaseConfig }),
     ThrottlerModule.forRootAsync({ useFactory: throttlerConfig }),
     SecurityModule,
+    DatabaseModule,
     UsersModule,
     AuthModule,
     LessonsModule,
@@ -41,6 +45,8 @@ import { HealthController } from './common/health/health.controller';
     MarketplaceModule,
     CityModule,
     ProfileModule,
+    LandModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [

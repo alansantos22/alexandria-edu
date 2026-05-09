@@ -1,5 +1,21 @@
 import { Rarity } from '../entities/badge.entity';
 
+export interface EquippedItemDto {
+  id: string;
+  name: string;
+  type: string;
+  imageUrl: string | null;
+  rarity: string;
+}
+
+export interface ProfileCustomizationDto {
+  bio: string | null;
+  wallpaper: EquippedItemDto | null;
+  frame:     EquippedItemDto | null;
+  badge:     EquippedItemDto | null;
+  avatar:    EquippedItemDto | null;
+}
+
 export interface BadgeDto {
   id: string;
   code: string;
@@ -63,4 +79,5 @@ export interface ProfileResponseDto {
   badges: BadgeDto[];
   cards: CardDto[];
   tracks: TrackProgressDto[];
+  customization: ProfileCustomizationDto;
 }

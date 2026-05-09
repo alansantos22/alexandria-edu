@@ -36,13 +36,13 @@ export class MarketplaceController {
     return this.marketplaceService.getUserInventory(user.id);
   }
 
-  /** Equipa um item (altera active_*_item_id no perfil) */
+  /** Equipa um item (altera active_*_item_id no perfil). itemId null = desequipar */
   @Put('equip')
   equipItem(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: EquipItemDto,
   ) {
-    return this.marketplaceService.equipItem(user.id, dto.itemId);
+    return this.marketplaceService.equipItem(user.id, dto.itemId ?? null, dto.type);
   }
 
   /** Perfil público de um usuário (para exibir em posts do fórum, etc.) */

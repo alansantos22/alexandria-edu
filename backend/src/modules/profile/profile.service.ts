@@ -20,11 +20,12 @@ export class ProfileService {
       throw new NotFoundException('Perfil não encontrado');
     }
 
-    const [badges, cards, tracks, lessonStats] = await Promise.all([
+    const [badges, cards, tracks, lessonStats, customization] = await Promise.all([
       this.profileRepository.getUserBadges(user.id),
       this.profileRepository.getUserCards(user.id),
       this.profileRepository.getTracksWithProgress(user.id),
       this.profileRepository.getLessonStats(user.id),
+      this.profileRepository.getCustomizationWithItems(user.id),
     ]);
 
     const xpInCurrentLevel = user.xp % ProfileService.XP_PER_LEVEL;
@@ -42,7 +43,8 @@ export class ProfileService {
         streakDays:       user.streakDays,
         coinsBalance:     user.coinsBalance,
         memberSince:      user.createdAt,
-        avatarUrl:        `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(user.username)}`,
+        avatarUrl:        customization.avatar?.imageUrl
+                            ?? `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(user.username)}`,
         isOwnProfile:     user.id === requesterId,
       },
       stats: {
@@ -53,6 +55,12 @@ export class ProfileService {
       badges,
       cards,
       tracks,
+      customization,
     };
+  }
+
+  async updateBio(userId: string, bio: string | null): Promise<{ bio: string | null }> {
+    await this.profileRepository.updateBio(userId, bio);
+    return { bio };
   }
 }

@@ -99,8 +99,17 @@ export class MarketplaceService {
 
   async equipItem(
     userId: string,
-    itemId: string,
+    itemId: string | null,
+    type?: 'avatar' | 'wallpaper' | 'badge' | 'frame',
   ): Promise<UserProfileCustomization> {
+    // null = desequipar o slot
+    if (itemId === null || itemId === undefined) {
+      if (!type) throw new BadRequestException('Informe o tipo do slot para desequipar.');
+      const profile = await this.marketplaceRepo.unequipSlot(userId, type as any);
+      this.logger.log(`User ${userId} unequipped slot ${type}`);
+      return profile;
+    }
+
     const owns = await this.marketplaceRepo.userOwnsItem(userId, itemId);
     if (!owns) throw new BadRequestException('Você não possui este item no inventário.');
 

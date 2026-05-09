@@ -5,7 +5,10 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import fastifyCors from '@fastify/cors';
+import fastifyCors      from '@fastify/cors';
+import fastifyMultipart from '@fastify/multipart';
+import fastifyStatic    from '@fastify/static';
+import * as path        from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -22,6 +25,19 @@ async function bootstrap() {
     origin: corsOrigin.split(',').map((s) => s.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  });
+
+  // Multipart (upload de arquivos) — 5 MB por arquivo
+  await app.register(fastifyMultipart as any, {
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
+
+  // Serve a pasta uploads/ como estática em /uploads/*
+  const uploadsDir = path.resolve(process.cwd(), 'uploads');
+  await app.register(fastifyStatic as any, {
+    root:   uploadsDir,
+    prefix: '/uploads/',
+    decorateReply: false,
   });
 
   app.useGlobalPipes(

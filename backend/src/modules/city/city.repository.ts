@@ -113,18 +113,37 @@ export class CityRepository {
   // ── World Map ─────────────────────────────────────────
 
   async findWorldMap(): Promise<WorldCityInfo[]> {
-    return this.metaRepo.query(`
+    const rows: any[] = await this.metaRepo.query(`
       SELECT
         cm.user_id         AS userId,
         u.username,
         cm.world_x         AS worldX,
         cm.world_z         AS worldZ,
         cm.city_level      AS cityLevel,
-        cm.total_buildings AS totalBuildings
+        cm.total_buildings AS totalBuildings,
+        GROUP_CONCAT(
+          CONCAT(lt.tile_x, ',', lt.tile_z)
+          ORDER BY lt.tile_x, lt.tile_z
+          SEPARATOR ';'
+        ) AS landTilesRaw
       FROM city_meta cm
       JOIN users u ON u.id = cm.user_id
+      LEFT JOIN land_tiles lt ON lt.city_user_id = cm.user_id
+      GROUP BY cm.user_id, u.username, cm.world_x, cm.world_z, cm.city_level, cm.total_buildings
       ORDER BY cm.total_buildings DESC
     `);
+
+    return rows.map(row => ({
+      ...row,
+      landTiles: (row.landTilesRaw ?? '')
+        .split(';')
+        .filter(Boolean)
+        .map((s: string) => {
+          const [x, z] = s.split(',').map(Number);
+          return { x, z };
+        }),
+      landTilesRaw: undefined,
+    }));
   }
 }
 
@@ -135,4 +154,5 @@ export interface WorldCityInfo {
   worldZ: number;
   cityLevel: number;
   totalBuildings: number;
+  landTiles: { x: number; z: number }[];
 }

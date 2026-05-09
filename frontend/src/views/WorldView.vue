@@ -22,6 +22,8 @@
     <div v-if="state === 'ready'" class="v-world__hud-coords">
       <span class="v-world__hud-label">COORDS</span>
       <span class="v-world__hud-val">{{ playerPos.x }}, {{ playerPos.z }}</span>
+      <span class="v-world__hud-sep">·</span>
+      <span class="v-world__hud-time">{{ timeOfDay }}</span>
     </div>
 
     <!-- HUD — dentro de uma cidade (banner central) -->
@@ -70,7 +72,7 @@ let cities = []
 
 const {
   init, loadWorld, checkNearbyCities, resize, dispose,
-  nearbyCity, enterCityZone, playerPos, playerMode, cameraModeRef,
+  nearbyCity, enterCityZone, playerPos, playerMode, cameraModeRef, timeOfDay,
 } = useWorldRenderer(canvasRef)
 
 async function load() {
@@ -178,6 +180,20 @@ onBeforeUnmount(() => {
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba($neutral-600, 0.2);
     border-radius: $radius-pill;
+  }
+
+  &__hud-sep {
+    font-size: 0.65rem;
+    color: $neutral-700;
+    font-family: var(--font-display);
+  }
+
+  &__hud-time {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: $neutral-300;
+    font-family: monospace;
+    letter-spacing: 0.04em;
   }
 
   &__hud-label {

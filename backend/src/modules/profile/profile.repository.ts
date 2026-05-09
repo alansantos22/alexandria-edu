@@ -8,9 +8,13 @@ import { Card } from './entities/card.entity';
 import { UserCard } from './entities/user-card.entity';
 import { Track } from './entities/track.entity';
 import { LearningModule } from './entities/learning-module.entity';
+
 import { Lesson } from '@/modules/lessons/entities/lesson.entity';
 import { UserLessonProgress } from '@/modules/lessons/entities/user-lesson-progress.entity';
-import { BadgeDto, CardDto, TrackProgressDto } from './dto/profile-response.dto';
+import { MarketplaceItem } from '@/modules/marketplace/entities/marketplace-item.entity';
+import { UserProfileCustomization } from '@/modules/marketplace/entities/user-profile-customization.entity';
+
+import { BadgeDto, CardDto, ProfileCustomizationDto, TrackProgressDto } from './dto/profile-response.dto';
 
 @Injectable()
 export class ProfileRepository {
@@ -23,7 +27,44 @@ export class ProfileRepository {
     @InjectRepository(LearningModule)      private readonly moduleRepo: Repository<LearningModule>,
     @InjectRepository(Lesson)              private readonly lessonRepo: Repository<Lesson>,
     @InjectRepository(UserLessonProgress)  private readonly progressRepo: Repository<UserLessonProgress>,
+    @InjectRepository(MarketplaceItem)     private readonly mktItemRepo: Repository<MarketplaceItem>,
+    @InjectRepository(UserProfileCustomization)
+    private readonly customizationRepo: Repository<UserProfileCustomization>,
   ) {}
+
+  async getCustomizationWithItems(userId: string): Promise<ProfileCustomizationDto> {
+    const custom = await this.customizationRepo.findOne({ where: { userId } });
+
+    if (!custom) {
+      return { bio: null, wallpaper: null, frame: null, badge: null, avatar: null };
+    }
+
+    const slotIds = [
+      custom.activeWallpaperItemId,
+      custom.activeFrameItemId,
+      custom.activeBadgeItemId,
+      custom.activeAvatarItemId,
+    ].filter(Boolean) as string[];
+
+    const items = slotIds.length
+      ? await this.mktItemRepo.findBy({ id: In(slotIds) })
+      : [];
+
+    const byId = (id: string | null) => {
+      if (!id) return null;
+      const item = items.find(i => i.id === id);
+      if (!item) return null;
+      return { id: item.id, name: item.name, type: item.type, imageUrl: item.imageUrl, rarity: item.rarity };
+    };
+
+    return {
+      bio:      custom.bio,
+      wallpaper: byId(custom.activeWallpaperItemId),
+      frame:     byId(custom.activeFrameItemId),
+      badge:     byId(custom.activeBadgeItemId),
+      avatar:    byId(custom.activeAvatarItemId),
+    };
+  }
 
   async getUserBadges(userId: string): Promise<BadgeDto[]> {
     const userBadges = await this.userBadgeRepo.find({
@@ -130,5 +171,14 @@ export class ProfileRepository {
       this.progressRepo.countBy({ userId }),
     ]);
     return { totalLessons, completedLessons };
+  }
+
+  async updateBio(userId: string, bio: string | null): Promise<void> {
+    let custom = await this.customizationRepo.findOne({ where: { userId } });
+    if (!custom) {
+      custom = this.customizationRepo.create({ userId });
+    }
+    custom.bio = bio;
+    await this.customizationRepo.save(custom);
   }
 }

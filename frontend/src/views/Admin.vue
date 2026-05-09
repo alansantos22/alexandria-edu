@@ -85,6 +85,13 @@
           <h3 class="c-card__title">Aulas</h3>
           <p class="c-card__body">Em breve: criar e organizar trilhas.</p>
         </article>
+
+        <!-- Upload de backgrounds -->
+        <AdminUploadBackground @created="onItemCreated" />
+
+        <!-- Paleta de cores -->
+        <AdminCreatePalette @created="onItemCreated" />
+
       </section>
     </main>
   </div>
@@ -99,6 +106,9 @@ import {
   Link as LinkIcon, Save, ExternalLink, CircleCheck, CircleAlert,
   Users, Library,
 } from 'lucide-vue-next'
+
+import AdminUploadBackground from '@/components/admin/AdminUploadBackground.vue'
+import AdminCreatePalette    from '@/components/admin/AdminCreatePalette.vue'
 
 const liveLink = ref('')
 const message  = ref('')
@@ -137,6 +147,11 @@ const logout = () => {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
   router.push('/')
+}
+
+const recentItems = ref([])
+function onItemCreated(item) {
+  recentItems.value.unshift(item)
 }
 </script>
 

@@ -89,6 +89,26 @@ export class MarketplaceRepository {
     return this.profileRepo.save(profile);
   }
 
+  async unequipSlot(userId: string, type: ItemType): Promise<UserProfileCustomization> {
+    const profile = await this.findOrCreateProfile(userId);
+
+    const slotMap: Record<ItemType, keyof UserProfileCustomization> = {
+      avatar:    'activeAvatarItemId',
+      frame:     'activeFrameItemId',
+      badge:     'activeBadgeItemId',
+      wallpaper: 'activeWallpaperItemId',
+    };
+
+    (profile as any)[slotMap[type]] = null;
+    return this.profileRepo.save(profile);
+  }
+
+  async updateBio(userId: string, bio: string | null): Promise<UserProfileCustomization> {
+    const profile = await this.findOrCreateProfile(userId);
+    profile.bio = bio;
+    return this.profileRepo.save(profile);
+  }
+
   findProfile(userId: string): Promise<UserProfileCustomization | null> {
     return this.profileRepo.findOne({ where: { userId } });
   }
