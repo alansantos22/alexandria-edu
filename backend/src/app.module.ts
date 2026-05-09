@@ -14,6 +14,9 @@ import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ForumModule } from './modules/forum/forum.module';
+import { EconomyModule }      from './modules/economy/economy.module';
+import { MarketplaceModule }  from './modules/marketplace/marketplace.module';
+import { CityModule }         from './modules/city/city.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -33,6 +36,9 @@ import { HealthController } from './common/health/health.controller';
     LessonsModule,
     SettingsModule,
     ForumModule,
+    EconomyModule,
+    MarketplaceModule,
+    CityModule,
   ],
   controllers: [HealthController],
   providers: [

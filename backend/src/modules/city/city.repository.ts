@@ -1,0 +1,138 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { CityMeta } from './entities/city-meta.entity';
+import { CityChunk } from './entities/city-chunk.entity';
+import { UserVehicle } from './entities/user-vehicle.entity';
+
+@Injectable()
+export class CityRepository {
+  constructor(
+    @InjectRepository(CityMeta)
+    private readonly metaRepo: Repository<CityMeta>,
+    @InjectRepository(CityChunk)
+    private readonly chunkRepo: Repository<CityChunk>,
+    @InjectRepository(UserVehicle)
+    private readonly vehicleRepo: Repository<UserVehicle>,
+  ) {}
+
+  // ── City Meta ──────────────────────────────────────────────
+
+  async findMeta(userId: string): Promise<CityMeta | null> {
+    return this.metaRepo.findOne({ where: { userId } });
+  }
+
+  async createMeta(userId: string): Promise<CityMeta> {
+    const seed = randomUUID();
+    const worldPos = await this.nextAvailableWorldPosition();
+    const meta = this.metaRepo.create({
+      userId,
+      citySeed: seed,
+      worldX: worldPos.x,
+      worldZ: worldPos.z,
+    });
+    return this.metaRepo.save(meta);
+  }
+
+  async incrementBuildings(userId: string, delta: number): Promise<void> {
+    await this.metaRepo
+      .createQueryBuilder()
+      .update(CityMeta)
+      .set({ totalBuildings: () => `GREATEST(total_buildings + ${delta}, 0)` })
+      .where('user_id = :userId', { userId })
+      .execute();
+  }
+
+  /** Assigns a unique (world_x, world_z) in a spiral pattern from origin. */
+  private async nextAvailableWorldPosition(): Promise<{ x: number; z: number }> {
+    const taken = await this.metaRepo.find({ select: ['worldX', 'worldZ'] });
+    const takenSet = new Set(taken.map((m) => `${m.worldX}:${m.worldZ}`));
+
+    let x = 0, z = 0, dx = 0, dz = -1;
+    const maxSteps = 10000;
+
+    for (let i = 0; i < maxSteps; i++) {
+      if (!takenSet.has(`${x}:${z}`)) return { x, z };
+      if (x === z || (x < 0 && x === -z) || (x > 0 && x === 1 - z)) {
+        [dx, dz] = [-dz, dx];
+      }
+      x += dx;
+      z += dz;
+    }
+    return { x: taken.length, z: 0 };
+  }
+
+  // ── Chunks ────────────────────────────────────────────────
+
+  async findChunks(userId: string): Promise<CityChunk[]> {
+    return this.chunkRepo.find({ where: { userId } });
+  }
+
+  async upsertChunk(userId: string, chunkX: number, chunkZ: number, dataHex: string): Promise<CityChunk> {
+    const existing = await this.chunkRepo.findOne({ where: { userId, chunkX, chunkZ } });
+
+    if (existing) {
+      existing.dataHex = dataHex;
+      existing.version += 1;
+      return this.chunkRepo.save(existing);
+    }
+
+    const chunk = this.chunkRepo.create({ userId, chunkX, chunkZ, dataHex });
+    return this.chunkRepo.save(chunk);
+  }
+
+  // ── Vehicles ──────────────────────────────────────────────
+
+  async findVehicles(userId: string): Promise<UserVehicle[]> {
+    return this.vehicleRepo.find({ where: { userId } });
+  }
+
+  async findVehicle(userId: string, vehicleType: string): Promise<UserVehicle | null> {
+    return this.vehicleRepo.findOne({ where: { userId, vehicleType } });
+  }
+
+  async createVehicle(userId: string, vehicleType: string): Promise<UserVehicle> {
+    const vehicle = this.vehicleRepo.create({ userId, vehicleType });
+    return this.vehicleRepo.save(vehicle);
+  }
+
+  async setActiveVehicle(userId: string, vehicleId: string): Promise<void> {
+    await this.vehicleRepo.update({ userId }, { isActive: false });
+    await this.vehicleRepo.update({ id: vehicleId, userId }, { isActive: true });
+  }
+
+  async ensureSkateboard(userId: string): Promise<void> {
+    const exists = await this.findVehicle(userId, 'skateboard');
+    if (!exists) {
+      const vehicle = this.vehicleRepo.create({ userId, vehicleType: 'skateboard', isActive: true });
+      await this.vehicleRepo.save(vehicle);
+    }
+  }
+
+  // ── World Map ─────────────────────────────────────────
+
+  async findWorldMap(): Promise<WorldCityInfo[]> {
+    return this.metaRepo.query(`
+      SELECT
+        cm.user_id         AS userId,
+        u.username,
+        cm.world_x         AS worldX,
+        cm.world_z         AS worldZ,
+        cm.city_level      AS cityLevel,
+        cm.total_buildings AS totalBuildings
+      FROM city_meta cm
+      JOIN users u ON u.id = cm.user_id
+      ORDER BY cm.total_buildings DESC
+    `);
+  }
+}
+
+export interface WorldCityInfo {
+  userId: string;
+  username: string;
+  worldX: number;
+  worldZ: number;
+  cityLevel: number;
+  totalBuildings: number;
+}

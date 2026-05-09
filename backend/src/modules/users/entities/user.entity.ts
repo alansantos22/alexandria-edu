@@ -55,6 +55,9 @@ export class User {
   @Column({ name: 'last_activity_at', type: 'timestamp', nullable: true })
   lastActivityAt: Date | null;
 
+  @Column({ name: 'coins_balance', type: 'int', default: 0 })
+  coinsBalance: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 

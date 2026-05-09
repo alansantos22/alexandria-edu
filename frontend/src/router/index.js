@@ -14,7 +14,11 @@ const routes = [
   { path: '/home', component: Home, meta: { requiresAuth: true } },
   { path: '/lesson/:id', component: LessonPlayer, meta: { requiresAuth: true } },
   { path: '/admin', component: Admin, meta: { requiresAuth: true } },
-  { path: '/forum', component: Forum, meta: { requiresAuth: true } },
+  { path: '/forum',        component: Forum, meta: { requiresAuth: true } },
+  { path: '/marketplace',  component: () => import('../views/Marketplace.vue'), meta: { requiresAuth: true } },
+  { path: '/world',        component: () => import('../views/WorldView.vue'),   meta: { requiresAuth: true } },
+  { path: '/city',         component: () => import('../views/CityView.vue'),    meta: { requiresAuth: true } },
+  { path: '/city/:userId', component: () => import('../views/CityView.vue'),    meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

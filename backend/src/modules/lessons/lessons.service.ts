@@ -2,12 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { LessonsRepository } from './lessons.repository';
 import { ProgressRepository } from './progress.repository';
 import { Lesson } from './entities/lesson.entity';
+import { EconomyService } from '../economy/economy.service';
 
 @Injectable()
 export class LessonsService {
   constructor(
     private readonly lessonsRepository: LessonsRepository,
     private readonly progressRepository: ProgressRepository,
+    private readonly economyService: EconomyService,
   ) {}
 
   async listForStudent(): Promise<Lesson[]> {
@@ -41,18 +43,23 @@ export class LessonsService {
   async completeLesson(
     userId: string,
     lessonId: string,
-  ): Promise<{ alreadyCompleted: boolean; xpEarned: number; xp: number; level: number; streakDays: number }> {
+  ): Promise<{ alreadyCompleted: boolean; xpEarned: number; xp: number; level: number; streakDays: number; coinsEarned: number; coinsBalance: number }> {
     await this.getById(lessonId);
 
     const alreadyCompleted = await this.progressRepository.isCompleted(userId, lessonId);
     if (alreadyCompleted) {
       const stats = await this.progressRepository.getUserStats(userId);
-      return { alreadyCompleted: true, xpEarned: 0, ...stats };
+      const { balance } = await this.economyService.getBalance(userId);
+      return { alreadyCompleted: true, xpEarned: 0, coinsEarned: 0, coinsBalance: balance, ...stats };
     }
 
     await this.progressRepository.markCompleted(userId, lessonId);
-    const stats = await this.progressRepository.awardXpAndUpdateStreak(userId);
-    return { alreadyCompleted: false, xpEarned: 50, ...stats };
+    const [stats, coinTx] = await Promise.all([
+      this.progressRepository.awardXpAndUpdateStreak(userId),
+      this.economyService.awardCoins(userId, 'LESSON_COMPLETE', lessonId),
+    ]);
+    const { balance } = await this.economyService.getBalance(userId);
+    return { alreadyCompleted: false, xpEarned: 50, coinsEarned: coinTx?.delta ?? 0, coinsBalance: balance, ...stats };
   }
 
   async getProgress(userId: string): Promise<{

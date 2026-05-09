@@ -7,9 +7,10 @@ import { LessonsRepository } from './lessons.repository';
 import { ProgressRepository } from './progress.repository';
 import { LessonsService } from './lessons.service';
 import { LessonsController } from './lessons.controller';
+import { EconomyModule } from '../economy/economy.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Lesson, UserLessonProgress, User])],
+  imports: [TypeOrmModule.forFeature([Lesson, UserLessonProgress, User]), EconomyModule],
   controllers: [LessonsController],
   providers: [LessonsRepository, ProgressRepository, LessonsService],
   exports: [LessonsService],

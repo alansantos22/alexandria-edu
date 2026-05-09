@@ -44,6 +44,15 @@
 
     <!-- ── Footer ────────────────────────────── -->
     <div class="c-sidebar__foot">
+      <!-- Coins balance -->
+      <div
+        class="c-sidebar__coins"
+        :title="collapsed ? `${balance} moedas` : undefined"
+      >
+        <span class="c-sidebar__coins-icon">🪙</span>
+        <span class="c-sidebar__coins-value c-sidebar__link-label">{{ balance.toLocaleString('pt-BR') }}</span>
+      </div>
+
       <div
         class="c-sidebar__user"
         :title="collapsed ? (user?.username || 'Aluno') : undefined"
@@ -68,15 +77,26 @@
       </button>
     </div>
   </aside>
+
+  <!-- ── Coin reward toast ─────────────────── -->
+  <Transition name="coin-toast">
+    <div v-if="notification" class="c-coin-toast" role="status" aria-live="polite">
+      <span class="c-coin-toast__icon">🪙</span>
+      <span class="c-coin-toast__text">{{ notification.message }}</span>
+    </div>
+  </Transition>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronLeft, LogOut,
-  House, MessageCircle, ShieldCheck, BookOpen,
+  House, MessageCircle, ShieldCheck, BookOpen, ShoppingBag, Building2, Map,
 } from 'lucide-vue-next'
+import { useEconomyStore } from '@/core/store/economy.js'
+
+const { balance, notification, fetchBalance } = useEconomyStore()
 
 defineProps({
   collapsed:  { type: Boolean, default: false },
@@ -90,15 +110,22 @@ const router = useRouter()
 
 const user = computed(() => JSON.parse(localStorage.getItem('user') || 'null'))
 
+onMounted(() => {
+  if (user.value) fetchBalance()
+})
+
 const userInitial = computed(() => {
   const name = user.value?.username || user.value?.email || '?'
   return name[0].toUpperCase()
 })
 
 const allNavItems = [
-  { to: '/home',  icon: House,          label: 'Início'  },
-  { to: '/forum', icon: MessageCircle,  label: 'Fórum'   },
-  { to: '/admin', icon: ShieldCheck,    label: 'Admin', adminOnly: true },
+  { to: '/home',        icon: House,         label: 'Início'      },
+  { to: '/world',       icon: Map,           label: 'Mapa'        },
+  { to: '/city',        icon: Building2,     label: 'Cidade'      },
+  { to: '/forum',       icon: MessageCircle, label: 'Fórum'       },
+  { to: '/marketplace', icon: ShoppingBag,   label: 'Marketplace' },
+  { to: '/admin',       icon: ShieldCheck,   label: 'Admin', adminOnly: true },
 ]
 
 const visibleItems = computed(() =>
@@ -349,6 +376,26 @@ $_transition:   width $dur-base $ease-out, transform $dur-base $ease-out;
     }
   }
 
+  &__coins {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    padding: $space-2 $space-3;
+    border-radius: $radius-md;
+    background: rgba($brand-primary, 0.1);
+    border: 1px solid rgba($brand-primary, 0.2);
+    overflow: hidden;
+    white-space: nowrap;
+
+    &-icon { font-size: 1rem; flex-shrink: 0; }
+    &-value {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: $brand-primary-soft;
+      font-family: var(--font-display);
+    }
+  }
+
   // ── Collapsed (desktop) ─────────────────────────────────────────
   &--collapsed {
     width: $_w-collapsed;
@@ -369,6 +416,7 @@ $_transition:   width $dur-base $ease-out, transform $dur-base $ease-out;
     .c-sidebar__link    { justify-content: center; padding: $space-3; gap: 0; }
     .c-sidebar__user    { justify-content: center; padding: $space-2 0; }
     .c-sidebar__logout  { justify-content: center; padding: $space-3; gap: 0; }
+    .c-sidebar__coins   { justify-content: center; padding: $space-2; gap: 0; }
   }
 
   // ── Mobile ──────────────────────────────────────────────────────
@@ -401,7 +449,39 @@ $_transition:   width $dur-base $ease-out, transform $dur-base $ease-out;
       .c-sidebar__link    { justify-content: flex-start; padding: $space-3 $space-4; gap: $space-3; }
       .c-sidebar__user    { justify-content: flex-start; padding: $space-2 $space-2; }
       .c-sidebar__logout  { justify-content: flex-start; padding: $space-3 $space-4; gap: $space-3; }
+      .c-sidebar__coins   { justify-content: flex-start; padding: $space-2 $space-3; }
     }
   }
 }
+
+// ── Coin toast (global, fora do scoped sidebar) ──────────────────
+.c-coin-toast {
+  position: fixed;
+  bottom: $space-6;
+  right: $space-6;
+  z-index: $z-overlay + 10;
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-3 $space-5;
+  background: rgba($neutral-800, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba($brand-primary, 0.4);
+  border-radius: $radius-pill;
+  box-shadow: $shadow-glow-primary, $shadow-md;
+  color: $neutral-0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: var(--font-display);
+  pointer-events: none;
+
+  &__icon { font-size: 1.1rem; }
+  &__text { color: $brand-primary-soft; }
+}
+
+// Transition
+.coin-toast-enter-active,
+.coin-toast-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.coin-toast-enter-from,
+.coin-toast-leave-to    { opacity: 0; transform: translateY(12px); }
 </style>
