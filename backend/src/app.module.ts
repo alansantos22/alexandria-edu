@@ -13,6 +13,7 @@ import { SecurityModule } from './core/security/security.module';
 import { UsersModule } from './modules/users/users.module';
 import { LessonsModule } from './modules/lessons/lessons.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { ForumModule } from './modules/forum/forum.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -31,6 +32,7 @@ import { HealthController } from './common/health/health.controller';
     AuthModule,
     LessonsModule,
     SettingsModule,
+    ForumModule,
   ],
   controllers: [HealthController],
   providers: [

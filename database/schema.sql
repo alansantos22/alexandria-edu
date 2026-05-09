@@ -86,8 +86,71 @@ CREATE TABLE IF NOT EXISTS settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
+-- FORUM CATEGORIES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forum_categories (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name        VARCHAR(100) NOT NULL,
+  description VARCHAR(255) NULL,
+  icon        VARCHAR(10)  NOT NULL DEFAULT '💬',
+  order_index INT          NOT NULL DEFAULT 0,
+  created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (id),
+  INDEX IDX_FORUM_CAT_ORDER (order_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- FORUM TOPICS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forum_topics (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  category_id INT UNSIGNED NOT NULL,
+  user_id     VARCHAR(36)  NOT NULL,
+  title       VARCHAR(255) NOT NULL,
+  content     TEXT         NOT NULL,
+  views       INT UNSIGNED NOT NULL DEFAULT 0,
+  is_pinned   BOOLEAN      NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (id),
+  INDEX IDX_FORUM_TOPIC_CAT (category_id),
+  INDEX IDX_FORUM_TOPIC_USER (user_id),
+  INDEX IDX_FORUM_TOPIC_CREATED (created_at),
+  CONSTRAINT FK_FORUM_TOPIC_CATEGORY FOREIGN KEY (category_id) REFERENCES forum_categories(id) ON DELETE CASCADE,
+  CONSTRAINT FK_FORUM_TOPIC_USER     FOREIGN KEY (user_id)     REFERENCES users(id)            ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- FORUM POSTS (respostas)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS forum_posts (
+  id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  topic_id   INT UNSIGNED NOT NULL,
+  user_id    VARCHAR(36)  NOT NULL,
+  content    TEXT         NOT NULL,
+  created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (id),
+  INDEX IDX_FORUM_POST_TOPIC (topic_id),
+  INDEX IDX_FORUM_POST_USER (user_id),
+  INDEX IDX_FORUM_POST_CREATED (created_at),
+  CONSTRAINT FK_FORUM_POST_TOPIC FOREIGN KEY (topic_id) REFERENCES forum_topics(id) ON DELETE CASCADE,
+  CONSTRAINT FK_FORUM_POST_USER  FOREIGN KEY (user_id)  REFERENCES users(id)        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
 -- SEED INICIAL
 -- ============================================================
 INSERT INTO settings (key_name, value)
 VALUES ('live_meeting_url', '')
 ON DUPLICATE KEY UPDATE value = value;
+
+INSERT INTO forum_categories (name, description, icon, order_index) VALUES
+  ('Dúvidas Gerais',     'Perguntas sobre o conteúdo das aulas',        '❓', 1),
+  ('Projetos e Portfólio', 'Compartilhe seus projetos e receba feedback', '🚀', 2),
+  ('Recursos e Dicas',   'Links, ferramentas e dicas úteis',            '💡', 3),
+  ('Off-topic',          'Conversas livres sobre tecnologia e carreira', '☕', 4)
+ON DUPLICATE KEY UPDATE name = name;

@@ -300,3 +300,97 @@ img, svg { display: block; max-width: 100%; }
 
   &__actions { display: flex; gap: $space-2; align-items: center; }
 }
+
+// -----------------------------------------------------------------------------
+// LAYOUT · App Shell com Sidebar
+// -----------------------------------------------------------------------------
+$_sidebar-w:            240px;
+$_sidebar-w-collapsed:   68px;
+
+.l-root {
+  min-height: 100vh;
+
+  // Quando sidebar está presente: CSS Grid de 2 colunas
+  &--app {
+    display: grid;
+    grid-template-columns: $_sidebar-w 1fr;
+    transition: grid-template-columns $dur-base $ease-out;
+    min-height: 100vh;
+
+    &.l-root--collapsed {
+      grid-template-columns: $_sidebar-w-collapsed 1fr;
+    }
+
+    // Mobile: sidebar some da grade (vai para fixed/drawer)
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr !important;
+    }
+  }
+}
+
+// Coluna de conteúdo ao lado da sidebar
+.l-app__content {
+  min-width: 0; // evita overflow em grid
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+// Overlay escuro quando sidebar está aberta no mobile
+.l-app__overlay {
+  display: none;
+
+  @media (max-width: 768px) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: calc(#{$z-overlay} - 1);
+  }
+}
+
+// FAB flutuante para toggle da sidebar no mobile
+.l-app__fab {
+  display: none;
+
+  @media (max-width: 768px) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    bottom: $space-6;
+    right: $space-5;
+    width: 52px;
+    height: 52px;
+    border-radius: $radius-pill;
+    border: 1px solid rgba($brand-primary, 0.4);
+    background: rgba($neutral-800, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: $shadow-glow-primary, $shadow-md;
+    cursor: pointer;
+    z-index: $z-modal;
+    transition: transform $dur-base $ease-spring, background $dur-fast $ease-out;
+
+    &:hover  { transform: scale(1.08); background: rgba($neutral-700, 0.9); }
+    &:active { transform: scale(0.95); }
+
+    &--open {
+      background: rgba($brand-primary-deep, 0.85);
+      border-color: rgba($brand-primary, 0.7);
+    }
+  }
+}
+
+.l-app__fab-icon {
+  font-size: 1.2rem;
+  color: $neutral-0;
+  line-height: 1;
+  user-select: none;
+}
+
+// Utilitário responsivo (usado nos views existentes)
+.u-hide-sm {
+  @media (max-width: #{$bp-sm}) { display: none !important; }
+}

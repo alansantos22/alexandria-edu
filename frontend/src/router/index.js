@@ -5,6 +5,7 @@ import Checkout from '../views/Checkout.vue'
 import Home from '../views/Home.vue'
 import LessonPlayer from '../views/LessonPlayer.vue'
 import Admin from '../views/Admin.vue'
+import Forum from '../views/Forum.vue'
 
 const routes = [
   { path: '/', component: Login },
@@ -12,7 +13,8 @@ const routes = [
   { path: '/checkout', component: Checkout },
   { path: '/home', component: Home, meta: { requiresAuth: true } },
   { path: '/lesson/:id', component: LessonPlayer, meta: { requiresAuth: true } },
-  { path: '/admin', component: Admin, meta: { requiresAuth: true } }
+  { path: '/admin', component: Admin, meta: { requiresAuth: true } },
+  { path: '/forum', component: Forum, meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

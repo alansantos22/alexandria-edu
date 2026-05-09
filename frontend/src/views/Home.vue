@@ -86,6 +86,19 @@
           <h3 class="c-card__title">Web3</h3>
           <p class="c-card__body">Wallets, contratos e cultura on-chain.</p>
         </article>
+
+        <!-- Comunidade / Fórum -->
+        <article class="c-card c-card--secondary c-bento__cell">
+          <div class="c-card__icon"><MessageCircle :size="22" /></div>
+          <p class="c-card__eyebrow">Comunidade</p>
+          <h3 class="c-card__title">Fórum</h3>
+          <p class="c-card__body">Tire dúvidas e conecte-se com outros alunos.</p>
+          <div class="c-card__footer">
+            <router-link to="/forum" class="c-btn c-btn--sm c-btn--secondary">
+              Acessar fórum
+            </router-link>
+          </div>
+        </article>
       </section>
 
       <!-- Lessons -->
@@ -142,7 +155,7 @@ import api from '@/core/api'
 import {
   Sparkles, CircleUser, LogOut, Radio, Video, PlayCircle,
   BrainCircuit, Workflow, Gamepad2, Wallet, BookOpen,
-  Library, Clock, Play,
+  Library, Clock, Play, MessageCircle,
 } from 'lucide-vue-next'
 
 const liveLink = ref('')
