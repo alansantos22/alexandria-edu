@@ -3,12 +3,13 @@ import {
   WebGLRenderer, Scene, OrthographicCamera, PerspectiveCamera, Color, FogExp2,
   AmbientLight, DirectionalLight, HemisphereLight,
   BoxGeometry, PlaneGeometry, ConeGeometry, CylinderGeometry, SphereGeometry,
-  MeshLambertMaterial, ShaderMaterial,
+  MeshLambertMaterial, MeshStandardMaterial, ShaderMaterial,
   InstancedMesh, Mesh, Group,
   Matrix4, Vector3,
   Points, PointsMaterial, BufferGeometry, Float32BufferAttribute,
-  BackSide, SRGBColorSpace, ACESFilmicToneMapping,
+  BackSide, SRGBColorSpace, ACESFilmicToneMapping, TextureLoader,
 } from 'three'
+import { GLTFLoader }    from 'three/addons/loaders/GLTFLoader.js'
 import { SimplexNoise } from 'three/addons/math/SimplexNoise.js'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ const HALF_ROAD_TOTAL = ROAD_WIDTH / 2 + CURB_W + SIDEWALK_W
 const CORNER_OFFSET   = Math.ceil(HALF_ROAD_TOTAL + 3 + PLOT_RADIUS)
 const ROAD_REACH      = 1800
 const ROAD_GRID_N     = 5
-const MAX_TREES       = 1200
+const MAX_TREES       = 2800
 const TERRAIN_HALF    = 420
 const ENTER_DIST      = 6
 const DASH_LEN        = 4
@@ -369,61 +370,171 @@ export function useWorldRenderer(canvasRef) {
       const x = (rng() * 2 - 1) * TERRAIN_HALF * 0.9
       const z = (rng() * 2 - 1) * TERRAIN_HALF * 0.9
       if (_nearRoad(x, z) || _nearCity(x, z, cities)) continue
-      placed.push({ x, z, s: 0.55 + rng() * 0.85 })
+      // Tamanhos com mais variação: árvores pequenas, médias e grandes
+      const sizeClass = rng()
+      let s
+      if (sizeClass < 0.3) s = 0.8 + rng() * 0.4     // 30% pequenas: 0.8-1.2
+      else if (sizeClass < 0.65) s = 1.3 + rng() * 0.6 // 35% médias: 1.3-1.9
+      else s = 2.0 + rng() * 0.9                      // 35% grandes: 2.0-2.9
+      placed.push({ x, z, s, tVar: rng(), cVar: rng() })
     }
 
     const n        = placed.length
     const trunkMat = new MeshLambertMaterial({ color: 0x3e2a18 })
     const coneMat  = new MeshLambertMaterial({ color: 0x1e5c18 })
-    const trunkInst = new InstancedMesh(new CylinderGeometry(0.1, 0.16, 1.0, 5), trunkMat, n)
-    const coneInst  = new InstancedMesh(new ConeGeometry(0.88, 2.2, 6), coneMat, n)
-    trunkInst.castShadow = coneInst.castShadow = true
+    
+    // Criar múltiplos instanced meshes com variações de geometria
+    // Troncos com diferentes espessuras
+    const trunk1Inst = new InstancedMesh(new CylinderGeometry(0.12, 0.22, 1.3, 6), trunkMat, n)
+    const trunk2Inst = new InstancedMesh(new CylinderGeometry(0.15, 0.28, 1.5, 6), trunkMat, Math.floor(n * 0.4))
+    const trunk3Inst = new InstancedMesh(new CylinderGeometry(0.10, 0.18, 1.2, 5), trunkMat, Math.floor(n * 0.4))
+    
+    // Copas com diferentes formatos
+    const cone1Inst = new InstancedMesh(new ConeGeometry(1.0, 2.6, 7), coneMat, n)
+    const cone2Inst = new InstancedMesh(new ConeGeometry(1.15, 3.0, 8), coneMat, Math.floor(n * 0.3))
+    const cone3Inst = new InstancedMesh(new ConeGeometry(0.9, 2.3, 6), coneMat, Math.floor(n * 0.3))
+    
+    trunk1Inst.castShadow = trunk2Inst.castShadow = trunk3Inst.castShadow = true
+    cone1Inst.castShadow = cone2Inst.castShadow = cone3Inst.castShadow = true
 
     const mm = new Matrix4()
-    placed.forEach(({ x, z, s }, i) => {
-      mm.makeScale(s, s, s); mm.setPosition(x, 0.5 * s, z);  trunkInst.setMatrixAt(i, mm)
-      mm.makeScale(s, s, s); mm.setPosition(x, 1.65 * s, z); coneInst.setMatrixAt(i, mm)
+    let t1Idx = 0, t2Idx = 0, t3Idx = 0, c1Idx = 0, c2Idx = 0, c3Idx = 0
+    
+    placed.forEach(({ x, z, s, tVar, cVar }, i) => {
+      // Distribuir entre diferentes variações de tronco
+      let trunkType = Math.floor(tVar * 3)
+      if (trunkType === 0 && t1Idx < Math.floor(n * 0.5)) {
+        mm.makeScale(s, s, s); mm.setPosition(x, 0.65 * s, z); trunk1Inst.setMatrixAt(t1Idx++, mm)
+      } else if (trunkType === 1 && t2Idx < Math.floor(n * 0.4)) {
+        mm.makeScale(s, s, s); mm.setPosition(x, 0.75 * s, z); trunk2Inst.setMatrixAt(t2Idx++, mm)
+      } else if (t3Idx < Math.floor(n * 0.4)) {
+        mm.makeScale(s, s, s); mm.setPosition(x, 0.60 * s, z); trunk3Inst.setMatrixAt(t3Idx++, mm)
+      }
+      
+      // Distribuir entre diferentes variações de copa
+      let coneType = Math.floor(cVar * 3)
+      if (coneType === 0 && c1Idx < Math.floor(n * 0.5)) {
+        mm.makeScale(s, s, s); mm.setPosition(x, 2.0 * s, z); cone1Inst.setMatrixAt(c1Idx++, mm)
+      } else if (coneType === 1 && c2Idx < Math.floor(n * 0.3)) {
+        mm.makeScale(s, s, s); mm.setPosition(x, 2.25 * s, z); cone2Inst.setMatrixAt(c2Idx++, mm)
+      } else if (c3Idx < Math.floor(n * 0.3)) {
+        mm.makeScale(s, s, s); mm.setPosition(x, 1.85 * s, z); cone3Inst.setMatrixAt(c3Idx++, mm)
+      }
     })
-    trunkInst.instanceMatrix.needsUpdate = coneInst.instanceMatrix.needsUpdate = true
-    scene.add(trunkInst, coneInst)
+    
+    trunk1Inst.instanceMatrix.needsUpdate = true
+    trunk2Inst.instanceMatrix.needsUpdate = true
+    trunk3Inst.instanceMatrix.needsUpdate = true
+    cone1Inst.instanceMatrix.needsUpdate = true
+    cone2Inst.instanceMatrix.needsUpdate = true
+    cone3Inst.instanceMatrix.needsUpdate = true
+    
+    scene.add(trunk1Inst, trunk2Inst, trunk3Inst, cone1Inst, cone2Inst, cone3Inst)
   }
 
   function _generateCityPlots(cities) {
     // Grid 5×5 — cada tile ocupa 1/5 do espaço utilizável entre estradas
     const USABLE    = WORLD_SCALE - 2 * HALF_ROAD_TOTAL  // ~67.3 unidades
     const TILE_SIZE = USABLE / 5                           // ~13.46 unidades
+    const CELL_W    = TILE_SIZE / 10                       // ~1.346 unidades por célula de grid
 
-    const platMat   = new MeshLambertMaterial({ color: 0x1a1a2e })
-    const borderMat = new MeshLambertMaterial({ color: 0x6c5ce7 })
-    const tileGeo   = new BoxGeometry(TILE_SIZE, 0.18, TILE_SIZE)
-    const edgeGeo   = new BoxGeometry(TILE_SIZE + 0.4, 0.08, TILE_SIZE + 0.4)
+    const CATEGORY_COLORS = {
+      residential: 0x8b9dc3,
+      commercial:  0x6c5ce7,
+      nature:      0x4caf50,
+      road:        0x555566,
+      decoration:  0xff6b9d,
+    }
+    const CATEGORY_HEIGHT = {
+      residential: 1.8,
+      commercial:  3.0,
+      nature:      1.2,
+      road:        0.25,
+      decoration:  0.9,
+    }
+
+    const gltfLoader = new GLTFLoader()
+    const texLoader  = new TextureLoader()
 
     cities.forEach(city => {
-      const tiles    = city.landTiles ?? []
-      const ownedSet = new Set(tiles.map(t => `${t.x},${t.z}`))
+      const buildings = city.buildings ?? []
 
-      // Renderiza cada tile possuído como uma plataforma escura
-      tiles.forEach(({ x, z }) => {
-        const wx = city.worldX * WORLD_SCALE + HALF_ROAD_TOTAL + x * TILE_SIZE + TILE_SIZE / 2
-        const wz = city.worldZ * WORLD_SCALE + HALF_ROAD_TOTAL + z * TILE_SIZE + TILE_SIZE / 2
+      // Renderiza cada prédio: GLB real se disponível, box colorido como fallback
+      buildings.forEach(b => {
+        const wx = city.worldX * WORLD_SCALE + HALF_ROAD_TOTAL + b.gridX * CELL_W + Math.max(b.sizeX, 1) * CELL_W / 2
+        const wz = city.worldZ * WORLD_SCALE + HALF_ROAD_TOTAL + b.gridZ * CELL_W + Math.max(b.sizeZ, 1) * CELL_W / 2
+        const rotY = (b.rotation ?? 0) * Math.PI / 180
 
-        const plat = new Mesh(tileGeo, platMat)
-        plat.position.set(wx, 0.09, wz)
-        plat.receiveShadow = true
-        scene.add(plat)
-
-        // Borda roxa apenas nos lados sem vizinho possuído (outline orgânico)
-        const exposed = [
-          [x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1],
-        ].some(([nx, nz]) => !ownedSet.has(`${nx},${nz}`))
-
-        if (exposed) {
-          const edge = new Mesh(edgeGeo, borderMat)
-          edge.position.set(wx, 0.04, wz)
-          scene.add(edge)
+        if (b.modelUrl) {
+          gltfLoader.load(b.modelUrl, (gltf) => {
+            const root = gltf.scene
+            root.scale.setScalar(b.scaleFactor ?? 1)
+            const mtl = b.material
+            root.traverse((node) => {
+              if (!node.isMesh) return
+              const mat = new MeshStandardMaterial({
+                roughness: mtl?.roughness ?? 0.7,
+                metalness: mtl?.metalness ?? 0.0,
+              })
+              if (mtl?.textureAlbedo) {
+                const isLinear = mtl.albedoColorSpace === 'linear'
+                const albedo   = texLoader.load(mtl.textureAlbedo)
+                albedo.flipY   = mtl.flipY ?? false
+                if (!isLinear) albedo.colorSpace = SRGBColorSpace
+                mat.map = albedo
+              }
+              if (mtl?.textureNormal) {
+                const n = texLoader.load(mtl.textureNormal)
+                n.flipY = mtl.flipY ?? false
+                mat.normalMap = n
+              }
+              if (mtl?.textureRoughnessMetalness) {
+                const rm = texLoader.load(mtl.textureRoughnessMetalness)
+                rm.flipY = mtl.flipY ?? false
+                mat.roughnessMap = rm
+                mat.metalnessMap = rm
+              }
+              if (mtl?.textureAo) {
+                const ao = texLoader.load(mtl.textureAo)
+                ao.flipY = mtl.flipY ?? false
+                mat.aoMap = ao
+              }
+              if (mtl?.textureEmissive) {
+                const em = texLoader.load(mtl.textureEmissive)
+                em.colorSpace = SRGBColorSpace
+                em.flipY = mtl.flipY ?? false
+                mat.emissiveMap = em
+                mat.emissive.set(0xffffff)
+              }
+              node.material = mat
+              node.castShadow = node.receiveShadow = true
+            })
+            root.position.set(wx, 0, wz)
+            root.rotation.y = rotY
+            scene.add(root)
+          }, undefined, () => {
+            // Fallback box on load error
+            _addFallbackBox(b, wx, wz, rotY, CELL_W, CATEGORY_COLORS, CATEGORY_HEIGHT)
+          })
+        } else {
+          _addFallbackBox(b, wx, wz, rotY, CELL_W, CATEGORY_COLORS, CATEGORY_HEIGHT)
         }
       })
     })
+  }
+
+  function _addFallbackBox(b, wx, wz, rotY, CELL_W, CATEGORY_COLORS, CATEGORY_HEIGHT) {
+    const color = CATEGORY_COLORS[b.category] ?? 0xaaaaaa
+    const bh    = CATEGORY_HEIGHT[b.category] ?? 1.5
+    const bw    = Math.max(b.sizeX, 1) * CELL_W * 0.82
+    const bd    = Math.max(b.sizeZ, 1) * CELL_W * 0.82
+    const geo   = new BoxGeometry(bw, bh, bd)
+    const mat   = new MeshLambertMaterial({ color })
+    const mesh  = new Mesh(geo, mat)
+    mesh.castShadow = mesh.receiveShadow = true
+    mesh.position.set(wx, bh / 2, wz)
+    mesh.rotation.y = rotY
+    scene.add(mesh)
   }
 
   function _spawnAmbientCars() {

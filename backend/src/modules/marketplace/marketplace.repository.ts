@@ -144,9 +144,8 @@ export class MarketplaceRepository {
     return this.buildingUnlockRepo.find({ where: { userId } });
   }
 
-  async userOwnsBuilding(userId: string, paletteItemId: string): Promise<boolean> {
-    const count = await this.buildingUnlockRepo.count({ where: { userId, paletteItemId } });
-    return count > 0;
+  countBuildingUnlocks(userId: string, paletteItemId: string): Promise<number> {
+    return this.buildingUnlockRepo.count({ where: { userId, paletteItemId } });
   }
 
   addBuildingUnlock(userId: string, paletteItemId: string): Promise<UserBuildingUnlock> {

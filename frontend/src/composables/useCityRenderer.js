@@ -2,13 +2,14 @@ import { ref } from 'vue'
 import {
   WebGLRenderer, Scene, OrthographicCamera, Color, FogExp2,
   AmbientLight, DirectionalLight,
-  BoxGeometry, PlaneGeometry, GridHelper,
+  BoxGeometry, PlaneGeometry,
   MeshLambertMaterial, MeshStandardMaterial, MeshBasicMaterial,
-  InstancedMesh, Mesh,
+  InstancedMesh, Mesh, Group,
   Matrix4, Vector3,
   Raycaster, Plane, TextureLoader,
   SRGBColorSpace, ACESFilmicToneMapping,
   BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial,
+  EdgesGeometry,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
@@ -45,12 +46,15 @@ function _categoryHeight(item) {
 
 export function useCityRenderer(canvasRef) {
   let renderer, scene, camera, animId
-  let ground, grid
+  let ground
 
   // Build mode internals
-  let buildGrid    = null
-  let buildBorder  = null
-  let ghostMesh    = null
+  let buildGrid       = null
+  let buildBorder     = null
+  let ghostMesh       = null
+  let ghostItem       = null    // palette item currently shown as ghost
+  let ghostRotation   = 0       // radians – applied to ghostMesh.rotation.y
+  let _ghostLoadToken = 0       // invalidates stale async GLB loads
   let ownedTileSet = new Set()   // "tileX,tileZ" strings
   const tileMeshes = []         // floor planes + border lines per owned tile
   let _buildHoverCb = null
@@ -145,16 +149,12 @@ export function useCityRenderer(canvasRef) {
   function _buildGround() {
     ground = new Mesh(
       new PlaneGeometry(400, 400),
-      new MeshLambertMaterial({ color: 0x12162a }),
+      new MeshLambertMaterial({ color: 0x3d7a28 }),
     )
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
     scene.add(ground)
-
-    grid = new GridHelper(400, 200, 0x1e2238, 0x181c2e)
-    grid.material.opacity = 0.5
-    grid.material.transparent = true
-    scene.add(grid)
+    // No grid helper — clean green terrain
   }
 
   // ── Render loop ────────────────────────────────────────────────────
@@ -335,35 +335,6 @@ export function useCityRenderer(canvasRef) {
   function enterBuildMode(buildings) {
     buildMode = true
 
-    // Align build grid to zone (center = GRID_EXTENT*CELL/2)
-    const zoneCenter = GRID_EXTENT * CELL / 2
-    if (!buildGrid) {
-      buildGrid = new GridHelper(GRID_EXTENT * CELL, GRID_EXTENT, 0x6c5ce7, 0x3d2080)
-      buildGrid.material.opacity = 0
-      buildGrid.material.transparent = true
-      scene.add(buildGrid)
-    }
-    buildGrid.position.set(zoneCenter, 0.01, zoneCenter)
-    buildGrid.visible = true
-    _fadeBuildGrid(0, 0.7, 400)
-
-    // Build zone boundary outline
-    if (!buildBorder) {
-      const W = GRID_EXTENT * CELL
-      const y = 0.05
-      const pts = new Float32Array([
-        0, y, 0,   W, y, 0,
-        W, y, 0,   W, y, W,
-        W, y, W,   0, y, W,
-        0, y, W,   0, y, 0,
-      ])
-      const geo = new BufferGeometry()
-      geo.setAttribute('position', new Float32BufferAttribute(pts, 3))
-      buildBorder = new LineSegments(geo, new LineBasicMaterial({ color: 0x6c5ce7 }))
-      scene.add(buildBorder)
-    }
-    buildBorder.visible = true
-
     // Load placed buildings into scene (skip already loaded)
     for (const b of buildings) {
       if (!placedMeshes.has(b.id)) {
@@ -377,7 +348,7 @@ export function useCityRenderer(canvasRef) {
   function setOwnedTiles(tiles) {
     _clearTileVisualization()
     ownedTileSet = new Set(tiles.map(t => `${t.tileX},${t.tileZ}`))
-    _buildTileVisualization(tiles)
+    // No tile floor overlay — only the set is maintained for placement validation
   }
 
   function _buildTileVisualization(tiles) {
@@ -444,10 +415,6 @@ export function useCityRenderer(canvasRef) {
 
   function exitBuildMode() {
     buildMode = false
-    _fadeBuildGrid(0.7, 0, 300, () => {
-      if (buildGrid) buildGrid.visible = false
-    })
-    if (buildBorder) buildBorder.visible = false
     _clearTileVisualization()
     _clearGhostMesh()
     // Placed building meshes are kept alive — they persist in explore mode
@@ -490,35 +457,90 @@ export function useCityRenderer(canvasRef) {
 
   function setGhostItem(item) {
     _clearGhostMesh()
+    ghostItem     = item
+    ghostRotation = 0
+
+    if (item.modelUrl) {
+      const token  = ++_ghostLoadToken
+      const asset  = item.buildingAsset
+      const loader = new GLTFLoader()
+      loader.load(item.modelUrl, (gltf) => {
+        if (token !== _ghostLoadToken) return
+        const root = gltf.scene
+        root.scale.setScalar(asset?.scaleFactor ?? 1)
+        root.traverse((node) => {
+          if (!node.isMesh) return
+          node.material = new MeshBasicMaterial({
+            color: 0x00d9c0,
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
+          })
+          node.castShadow = false
+        })
+        ghostMesh = root
+        ghostMesh.visible = false
+        scene.add(ghostMesh)
+      }, undefined, () => {
+        if (token !== _ghostLoadToken) return
+        _buildBoxGhost(item)
+      })
+    } else {
+      _buildBoxGhost(item)
+    }
+  }
+
+  function _buildBoxGhost(item) {
     const w = item.sizeX * CELL * 0.92
     const d = item.sizeZ * CELL * 0.92
     const h = _categoryHeight(item)
-    const geo = new BoxGeometry(w, h, d)
-    const mat = new MeshBasicMaterial({
-      color: 0x00d9c0,
-      transparent: true,
-      opacity: 0.45,
-    })
-    ghostMesh = new Mesh(geo, mat)
+    const group = new Group()
+
+    // Semi-transparent teal fill
+    const geo  = new BoxGeometry(w, h, d)
+    const mat  = new MeshBasicMaterial({ color: 0x00d9c0, transparent: true, opacity: 0.18, depthWrite: false })
+    const fill = new Mesh(geo, mat)
+    fill.position.y = h / 2
+    group.add(fill)
+
+    // Crisp edge outline
+    const edgesGeo = new EdgesGeometry(geo)
+    const edgesMat = new LineBasicMaterial({ color: 0x00ffee })
+    const edges    = new LineSegments(edgesGeo, edgesMat)
+    edges.position.y = h / 2
+    group.add(edges)
+
+    ghostMesh = group
     ghostMesh.visible = false
     scene.add(ghostMesh)
   }
 
+  function setGhostRotation(radians) {
+    ghostRotation = radians
+    if (ghostMesh) ghostMesh.rotation.y = radians
+  }
+
   function moveGhost(gridX, gridZ, isValid) {
-    if (!ghostMesh) return
-    const geo    = ghostMesh.geometry
-    const h      = geo.parameters.height
-    const halfW  = (geo.parameters.width  / 0.92 * 0.92) / 2
-    const halfD  = (geo.parameters.depth  / 0.92 * 0.92) / 2
-    const sizeX  = Math.round(geo.parameters.width  / (CELL * 0.92))
-    const sizeZ  = Math.round(geo.parameters.depth  / (CELL * 0.92))
+    if (!ghostMesh || !ghostItem) return
+    const sizeX = ghostItem.sizeX
+    const sizeZ = ghostItem.sizeZ
     ghostMesh.position.set(
       gridX * CELL + sizeX * CELL / 2,
-      h / 2,
+      0,
       gridZ * CELL + sizeZ * CELL / 2,
     )
-    ghostMesh.material.color.setHex(isValid ? 0x00d9c0 : 0xff4444)
-    ghostMesh.material.opacity = isValid ? 0.45 : 0.35
+    ghostMesh.rotation.y = ghostRotation
+    const fillColor = isValid ? 0x00d9c0 : 0xff4444
+    const edgeColor = isValid ? 0x00ffee : 0xff6666
+    ghostMesh.traverse((node) => {
+      if (node.isMesh && node.material) {
+        node.material.color.setHex(fillColor)
+        node.material.opacity = isValid ? 0.55 : 0.35
+      }
+      if (node.isLineSegments && node.material) {
+        node.material.color.setHex(edgeColor)
+      }
+    })
     ghostMesh.visible = true
   }
 
@@ -581,6 +603,7 @@ export function useCityRenderer(canvasRef) {
       h / 2,
       building.gridZ * CELL + item.sizeZ * CELL / 2,
     )
+    mesh.rotation.y = (building.rotation ?? 0) * Math.PI / 180
     mesh.userData.buildingId = building.id
     scene.add(mesh)
     placedMeshes.set(building.id, mesh)
@@ -643,6 +666,7 @@ export function useCityRenderer(canvasRef) {
         0,
         building.gridZ * CELL + item.sizeZ * CELL / 2,
       )
+      root.rotation.y = (building.rotation ?? 0) * Math.PI / 180
       root.userData.buildingId = building.id
       scene.add(root)
       placedMeshes.set(building.id, root)
@@ -655,9 +679,10 @@ export function useCityRenderer(canvasRef) {
   function _clearGhostMesh() {
     if (!ghostMesh) return
     scene.remove(ghostMesh)
-    ghostMesh.geometry.dispose()
-    ghostMesh.material.dispose()
+    _disposeObject(ghostMesh)
     ghostMesh = null
+    ghostItem = null
+    ++_ghostLoadToken
   }
 
   function _disposeObject(obj) {
@@ -720,7 +745,9 @@ export function useCityRenderer(canvasRef) {
     buildGrid?.geometry.dispose()
     buildGrid?.material.dispose()
     buildBorder?.geometry.dispose()
-    buildBorder?.material.dispose()    _clearTileVisualization();    renderer?.dispose()
+    buildBorder?.material.dispose()
+    _clearTileVisualization()
+    renderer?.dispose()
   }
 
   return {
@@ -731,7 +758,7 @@ export function useCityRenderer(canvasRef) {
     enterBuildMode, exitBuildMode,
     setBuildCallbacks,
     raycastToGrid,
-    setGhostItem, moveGhost, clearGhost,
+    setGhostItem, setGhostRotation, moveGhost, clearGhost,
     addPlacedBuilding, removePlacedBuilding, replacePlacedBuilding,
     loadBuildings,
     setOwnedTiles, pickPlacedBuilding,

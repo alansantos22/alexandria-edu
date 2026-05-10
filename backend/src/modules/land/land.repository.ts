@@ -25,4 +25,11 @@ export class LandRepository {
     const tile = this.repo.create({ cityUserId, tileX, tileZ })
     return this.repo.save(tile)
   }
+
+  async seedStartingTiles(cityUserId: string, startingTiles: readonly [number, number][]): Promise<LandTile[]> {
+    const tiles = startingTiles.map(([tileX, tileZ]) =>
+      this.repo.create({ cityUserId, tileX, tileZ }),
+    )
+    return this.repo.save(tiles)
+  }
 }

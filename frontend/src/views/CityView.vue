@@ -538,17 +538,19 @@ onBeforeUnmount(() => {
 
   &__hud-mode-btn {
     flex: 1;
-    padding: $space-1 $space-2;
+    padding: $space-2 $space-3;
     border-radius: $radius-md;
     border: 1px solid rgba($neutral-600, 0.3);
     background: rgba($neutral-800, 0.6);
-    color: $neutral-500;
-    font-size: 0.72rem;
+    color: $neutral-400;
+    font-size: 0.78rem;
     font-family: var(--font-display);
     font-weight: 600;
     cursor: pointer;
     transition: background $dur-fast $ease-out, border-color $dur-fast $ease-out,
                 color $dur-fast $ease-out;
+
+    &:hover { background: rgba($neutral-700, 0.7); color: $neutral-200; }
 
     &--active {
       background: rgba($brand-primary, 0.18);

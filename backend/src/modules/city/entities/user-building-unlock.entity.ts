@@ -7,7 +7,6 @@ import {
 } from 'typeorm';
 
 @Entity({ name: 'user_building_unlocks' })
-@Index('uq_ubu_user_item', ['userId', 'paletteItemId'], { unique: true })
 export class UserBuildingUnlock {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -16,6 +15,7 @@ export class UserBuildingUnlock {
   @Column({ name: 'user_id', type: 'varchar', length: 36 })
   userId: string;
 
+  @Index('idx_ubu_item')
   @Column({ name: 'palette_item_id', type: 'varchar', length: 36 })
   paletteItemId: string;
 

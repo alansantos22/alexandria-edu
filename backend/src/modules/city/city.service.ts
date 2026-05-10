@@ -89,12 +89,12 @@ export class CityService {
     const item = await this.cityRepository.findPaletteItem(dto.paletteItemId);
     if (!item) throw new NotFoundException('Item de construção não encontrado.');
 
-    // Ownership check: paid buildings require unlock
+    // Ownership check: paid buildings require available placements
     if (item.priceCoins > 0) {
-      const owned = await this.cityRepository.hasUnlockedBuilding(userId, dto.paletteItemId);
-      if (!owned) {
+      const available = await this.cityRepository.countAvailablePlacements(userId, dto.paletteItemId);
+      if (available <= 0) {
         throw new BadRequestException(
-          'Você precisa desbloquear este edifício no Marketplace antes de posicioná-lo.',
+          'Você não tem mais cópias disponíveis deste edifício. Compre mais no Marketplace.',
         );
       }
     }

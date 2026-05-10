@@ -24,6 +24,7 @@ export function useBuildMode(renderer) {
   const ccuLimit       = ref(2000)
   const ghostValid     = ref(false)
   const deleteMode     = ref(false)
+  const ghostRotation  = ref(0)   // radians, 45° steps
 
   // Occupied cells: Set<"gridX,gridZ">
   const occupied = new Set()
@@ -82,15 +83,21 @@ export function useBuildMode(renderer) {
         userId ? cityService.getLandOwned(userId) : Promise.resolve([]),
       ])
       // Only show buildings that have a 3D model (buildingAsset) associated
-      palette.value   = paletteData.filter(item => item.buildingAsset != null)
+      // Also filter paid items where the user has no copies left
+      palette.value   = paletteData.filter(item =>
+        item.buildingAsset != null &&
+        (item.priceCoins === 0 || (item.availableQty ?? 0) > 0)
+      )
       buildings.value = buildingsData
-      ccuUsed.value   = cityMeta?.ccuUsed   ?? 0
+      // Compute ccuUsed from actual placed buildings (avoids stale meta on re-entry)
+      ccuUsed.value   = buildingsData.reduce((sum, b) => sum + (b.paletteItem?.ccuCost ?? 0), 0)
       ccuLimit.value  = cityMeta?.ccuLimit  ?? 2000
       _buildOccupancy()
 
       renderer.setOwnedTiles(ownedLand)
       renderer.enterBuildMode(buildingsData)
       renderer.setBuildCallbacks(_onHover, _onClick)
+      window.addEventListener('keydown', _onKeyDown)
 
       isActive.value = true
     } finally {
@@ -103,7 +110,43 @@ export function useBuildMode(renderer) {
     selectedItem.value = null
     ghostValid.value   = false
     deleteMode.value   = false
+    ghostRotation.value = 0
     isActive.value     = false
+    window.removeEventListener('keydown', _onKeyDown)
+  }
+
+  // ── Palette sync ──────────────────────────────────────────────────
+
+  async function _refreshPalette() {
+    try {
+      const paletteData = await cityService.getMyPalette()
+      palette.value = paletteData.filter(item =>
+        item.buildingAsset != null &&
+        (item.priceCoins === 0 || (item.availableQty ?? 0) > 0)
+      )
+      // Clear selection if selected item is no longer available
+      if (selectedItem.value) {
+        const still = palette.value.find(p => p.id === selectedItem.value.id)
+        if (!still) clearSelection()
+        else selectedItem.value = still   // update ref to server-synced object
+      }
+    } catch { /* silent — stale state is better than crashing */ }
+  }
+
+  // ── Rotation (Q / E keys) ─────────────────────────────────────────
+
+  const _ROTATE_STEP = Math.PI / 2   // 90° per press (matches backend accepted values: 0, 90, 180, 270)
+
+  function rotateGhost(delta) {
+    const next = ((ghostRotation.value + delta) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)
+    ghostRotation.value = next
+    renderer.setGhostRotation(next)
+  }
+
+  function _onKeyDown(e) {
+    if (!isActive.value || !selectedItem.value) return
+    if (e.key === 'q' || e.key === 'Q') rotateGhost(-_ROTATE_STEP)
+    if (e.key === 'e' || e.key === 'E') rotateGhost(+_ROTATE_STEP)
   }
 
   // ── Delete mode ────────────────────────────────────────────
@@ -119,12 +162,14 @@ export function useBuildMode(renderer) {
 
   function selectItem(item) {
     selectedItem.value = item
+    ghostRotation.value = 0
     renderer.setGhostItem(item)
   }
 
   function clearSelection() {
     selectedItem.value = null
     ghostValid.value   = false
+    ghostRotation.value = 0
     renderer.clearGhost()
   }
 
@@ -136,6 +181,7 @@ export function useBuildMode(renderer) {
       renderer.clearGhost()
       return
     }
+    if (!selectedItem.value) return
     const cell = renderer.raycastToGrid(clientX, clientY)
     if (!cell) {
       renderer.clearGhost()
@@ -143,8 +189,10 @@ export function useBuildMode(renderer) {
       return
     }
     const { gridX, gridZ } = cell
-    const { sizeX, sizeZ, ccuCost } = selectedItem.value
+    const { sizeX, sizeZ, ccuCost, priceCoins, availableQty } = selectedItem.value
+    const hasQty = priceCoins <= 0 || (availableQty ?? 0) > 0
     const valid = (
+      hasQty &&
       _isFootprintFree(gridX, gridZ, sizeX, sizeZ) &&
       (ccuUsed.value + ccuCost) <= ccuLimit.value
     )
@@ -177,55 +225,64 @@ export function useBuildMode(renderer) {
     )
     if (!valid) return
 
-    // Quantity guard: paid buildings = 1 purchase → 1 placement
+    // Quantity guard (checked before optimistic update so rapid clicks can't bypass it)
     if (item.priceCoins > 0) {
-      const alreadyPlaced = buildings.value.filter(b => b.paletteItemId === item.id).length
-      if (alreadyPlaced >= 1) return
+      if ((item.availableQty ?? 0) <= 0) return
     }
 
-    // Optimistic update
+    // Optimistic update — decrement qty immediately to block next rapid click
+    if (item.priceCoins > 0) {
+      item.availableQty = (item.availableQty ?? 1) - 1
+    }
+
     const tempId = `tmp-${Date.now()}`
+    // Convert radians to degrees for storage/API (backend expects 0|90|180|270)
+    const rotationDeg = Math.round(ghostRotation.value * 180 / Math.PI) % 360
     const optimistic = {
       id: tempId,
       cityUserId: 'me',
       paletteItemId: item.id,
       paletteItem: item,
-      gridX, gridZ, rotation: 0,
+      gridX, gridZ, rotation: rotationDeg,
     }
     buildings.value.push(optimistic)
     ccuUsed.value += ccuCost
     _markOccupied(gridX, gridZ, sizeX, sizeZ)
     renderer.addPlacedBuilding(optimistic)
-    renderer.clearGhost()
+
+    // Hide palette item when qty hits 0
+    if (item.priceCoins > 0 && item.availableQty <= 0) {
+      palette.value = palette.value.filter(p => p.id !== item.id)
+      clearSelection()
+    } else {
+      renderer.clearGhost()
+    }
 
     try {
       const placed = await cityService.placeBuilding({
         paletteItemId: item.id,
         gridX,
         gridZ,
-        rotation: 0,
+        rotation: rotationDeg,
       })
       // Swap temp → real id
       const idx = buildings.value.findIndex(b => b.id === tempId)
       if (idx !== -1) buildings.value[idx] = placed
       renderer.replacePlacedBuilding(tempId, placed.id)
-
-      // Paid buildings: remove from palette after placement (1 unlock = 1 instance)
-      if (item.priceCoins > 0) {
-        palette.value = palette.value.filter(p => p.id !== item.id)
-        clearSelection()
-        return
-      }
+      // Always sync palette qty from server after a successful placement
+      await _refreshPalette()
     } catch {
-      // Rollback
+      // Rollback optimistic 3D/state changes
       buildings.value = buildings.value.filter(b => b.id !== tempId)
       ccuUsed.value -= ccuCost
       _unmarkOccupied(gridX, gridZ, sizeX, sizeZ)
       renderer.removePlacedBuilding(tempId)
+      // Re-sync palette from server so qty is always authoritative
+      await _refreshPalette()
     }
 
-    // Re-arm ghost for free buildings so player can keep placing
-    renderer.setGhostItem(item)
+    // Re-arm ghost if item still available after server sync
+    if (selectedItem.value) renderer.setGhostItem(selectedItem.value)
   }
 
   // ── Remove building ───────────────────────────────────────────────
@@ -239,6 +296,8 @@ export function useBuildMode(renderer) {
 
     try {
       await cityService.removeBuilding(id)
+      // Re-sync palette from server — the most reliable way to update qty
+      await _refreshPalette()
     } catch {
       buildings.value.push(building)
       ccuUsed.value += paletteItem.ccuCost
@@ -252,11 +311,12 @@ export function useBuildMode(renderer) {
     palette, buildings, categoryItems,
     selectedItem, activeCategory,
     ccuUsed, ccuLimit, ccuPercent,
-    ghostValid,
+    ghostValid, ghostRotation,
     BUILD_CATEGORIES,
     activate, deactivate,
     selectItem, clearSelection,
     removeBuilding,
     deleteMode, toggleDeleteMode,
+    rotateGhost,
   }
 }

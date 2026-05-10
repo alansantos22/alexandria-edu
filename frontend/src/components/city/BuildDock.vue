@@ -32,10 +32,9 @@
         <span class="build-dock__item-name">{{ item.name }}</span>
         <div class="build-dock__item-meta">
           <span class="build-dock__item-ccu">{{ item.ccuCost }} CCU</span>
-          <span v-if="item.priceCoins > 0" class="build-dock__item-price">
-            🪙 {{ item.priceCoins }}
+          <span v-if="item.availableQty !== null && item.availableQty !== undefined" class="build-dock__item-qty">
+            ×{{ item.availableQty }}
           </span>
-          <span v-else class="build-dock__item-free">Grátis</span>
         </div>
       </button>
 
@@ -190,15 +189,9 @@ defineEmits(['update:modelValue', 'select'])
       font-family: var(--font-display);
     }
 
-    &-price {
+    &-qty {
       font-size: 0.65rem;
-      font-weight: 600;
-      color: #f0a500;
-      font-family: var(--font-display);
-    }
-
-    &-free {
-      font-size: 0.6rem;
+      font-weight: 700;
       color: $brand-secondary;
       font-family: var(--font-display);
     }

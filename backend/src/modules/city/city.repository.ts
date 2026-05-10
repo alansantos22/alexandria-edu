@@ -138,12 +138,37 @@ export class CityRepository {
     });
   }
 
-  /** Returns only the buildings a user has unlocked + all free (priceCoins=0) buildings. */
-  async findMyPalette(userId: string): Promise<CityPaletteItem[]> {
-    const all = await this.findPalette();
-    const unlocks = await this.buildingUnlockRepo.find({ where: { userId } });
-    const unlockedSet = new Set(unlocks.map(u => u.paletteItemId));
-    return all.filter(item => item.priceCoins === 0 || unlockedSet.has(item.id));
+  /** Returns only the buildings a user has unlocked + all free (priceCoins=0) buildings,
+   *  annotated with availableQty (null = unlimited for free items). */
+  async findMyPalette(userId: string): Promise<(CityPaletteItem & { availableQty: number | null })[]> {
+    const [all, unlocks, placed] = await Promise.all([
+      this.findPalette(),
+      this.buildingUnlockRepo.find({ where: { userId } }),
+      this.buildingRepo.find({ where: { cityUserId: userId }, select: ['id', 'paletteItemId'] }),
+    ]);
+
+    // Count unlocks and placed per palette item
+    const unlockCount = new Map<string, number>()
+    for (const u of unlocks) {
+      unlockCount.set(u.paletteItemId, (unlockCount.get(u.paletteItemId) ?? 0) + 1)
+    }
+    const placedCount = new Map<string, number>()
+    for (const b of placed) {
+      placedCount.set(b.paletteItemId, (placedCount.get(b.paletteItemId) ?? 0) + 1)
+    }
+
+    return all
+      .filter(item => {
+        if (item.priceCoins === 0) return true
+        const available = (unlockCount.get(item.id) ?? 0) - (placedCount.get(item.id) ?? 0)
+        return available > 0
+      })
+      .map(item => ({
+        ...item,
+        availableQty: item.priceCoins === 0
+          ? null
+          : (unlockCount.get(item.id) ?? 0) - (placedCount.get(item.id) ?? 0),
+      }));
   }
 
   async hasUnlockedBuilding(userId: string, paletteItemId: string): Promise<boolean> {
@@ -151,9 +176,12 @@ export class CityRepository {
     return count > 0;
   }
 
-  async unlockBuilding(userId: string, paletteItemId: string): Promise<UserBuildingUnlock> {
-    const record = this.buildingUnlockRepo.create({ id: randomUUID(), userId, paletteItemId });
-    return this.buildingUnlockRepo.save(record);
+  async countAvailablePlacements(userId: string, paletteItemId: string): Promise<number> {
+    const [unlocks, placed] = await Promise.all([
+      this.buildingUnlockRepo.count({ where: { userId, paletteItemId } }),
+      this.buildingRepo.count({ where: { cityUserId: userId, paletteItemId } }),
+    ]);
+    return unlocks - placed;
   }
 
   async findPaletteItem(id: string): Promise<CityPaletteItem | null> {
@@ -219,6 +247,55 @@ export class CityRepository {
       ORDER BY cm.total_buildings DESC
     `);
 
+    // Fetch buildings separately (avoids GROUP_CONCAT nesting issues)
+    const buildingRows: any[] = await this.metaRepo.query(`
+      SELECT
+        cb.city_user_id    AS cityUserId,
+        cb.grid_x          AS gridX,
+        cb.grid_z          AS gridZ,
+        cb.rotation,
+        cp.size_x          AS sizeX,
+        cp.size_z          AS sizeZ,
+        cp.category,
+        cp.model_url       AS modelUrl,
+        cpa.scale_factor   AS scaleFactor,
+        cm.texture_albedo              AS textureAlbedo,
+        cm.texture_normal              AS textureNormal,
+        cm.texture_roughness_metalness AS textureRoughnessMetalness,
+        cm.texture_ao                  AS textureAo,
+        cm.texture_emissive            AS textureEmissive,
+        cm.roughness,
+        cm.metalness,
+        cm.albedo_color_space          AS albedoColorSpace,
+        cm.flip_y                      AS flipY
+      FROM city_buildings cb
+      JOIN city_palette cp ON cp.id = cb.palette_item_id
+      LEFT JOIN city_palette_assets cpa ON cpa.palette_item_id = cp.id
+      LEFT JOIN city_materials cm ON cm.id = cpa.material_id
+    `);
+
+    const buildingsByUser = new Map<string, WorldCityInfo['buildings']>();
+    for (const b of buildingRows) {
+      if (!buildingsByUser.has(b.cityUserId)) buildingsByUser.set(b.cityUserId, []);
+      buildingsByUser.get(b.cityUserId)!.push({
+        gridX: b.gridX, gridZ: b.gridZ, rotation: b.rotation,
+        sizeX: b.sizeX, sizeZ: b.sizeZ, category: b.category,
+        modelUrl: b.modelUrl ?? null,
+        scaleFactor: b.scaleFactor ?? 1,
+        material: b.textureAlbedo || b.roughness != null ? {
+          textureAlbedo:              b.textureAlbedo ?? null,
+          textureNormal:              b.textureNormal ?? null,
+          textureRoughnessMetalness:  b.textureRoughnessMetalness ?? null,
+          textureAo:                  b.textureAo ?? null,
+          textureEmissive:            b.textureEmissive ?? null,
+          roughness:                  b.roughness ?? 0.7,
+          metalness:                  b.metalness ?? 0.0,
+          albedoColorSpace:           b.albedoColorSpace ?? 'srgb',
+          flipY:                      !!b.flipY,
+        } : null,
+      });
+    }
+
     return rows.map(row => ({
       ...row,
       landTiles: (row.landTilesRaw ?? '')
@@ -228,6 +305,7 @@ export class CityRepository {
           const [x, z] = s.split(',').map(Number);
           return { x, z };
         }),
+      buildings: buildingsByUser.get(row.userId) ?? [],
       landTilesRaw: undefined,
     }));
   }
@@ -241,4 +319,21 @@ export interface WorldCityInfo {
   cityLevel: number;
   totalBuildings: number;
   landTiles: { x: number; z: number }[];
+  buildings: {
+    gridX: number; gridZ: number; rotation: number;
+    sizeX: number; sizeZ: number; category: string;
+    modelUrl: string | null;
+    scaleFactor: number;
+    material: {
+      textureAlbedo: string | null;
+      textureNormal: string | null;
+      textureRoughnessMetalness: string | null;
+      textureAo: string | null;
+      textureEmissive: string | null;
+      roughness: number;
+      metalness: number;
+      albedoColorSpace: string;
+      flipY: boolean;
+    } | null;
+  }[];
 }

@@ -27,7 +27,7 @@ export interface MarketplaceListResult {
 
 export interface BuildingWithOwnership extends CityPaletteItem {
   type: 'building';
-  owned: boolean;
+  ownedQty: number;   // total unlocks the user has purchased
   canAfford: boolean;
   rarity: 'common';
 }
@@ -231,13 +231,17 @@ export class MarketplaceService {
       this.economyService.getBalance(userId),
     ]);
 
-    const unlockedSet = new Set(unlocks.map(u => u.paletteItemId));
+    // Count how many of each building the user has purchased
+    const unlockCount = new Map<string, number>()
+    for (const u of unlocks) {
+      unlockCount.set(u.paletteItemId, (unlockCount.get(u.paletteItemId) ?? 0) + 1)
+    }
 
     const enriched: BuildingWithOwnership[] = buildings.map(b => ({
       ...b,
       type:      'building' as const,
-      rarity:    'common' as const,
-      owned:     b.priceCoins === 0 || unlockedSet.has(b.id),
+      rarity:    'common'  as const,
+      ownedQty:  b.priceCoins === 0 ? 0 : (unlockCount.get(b.id) ?? 0),
       canAfford: balance >= b.priceCoins,
     }));
 
@@ -254,9 +258,6 @@ export class MarketplaceService {
     if (building.priceCoins === 0) {
       throw new BadRequestException('Este edifício é gratuito e não precisa ser comprado.');
     }
-
-    const alreadyOwns = await this.marketplaceRepo.userOwnsBuilding(userId, paletteItemId);
-    if (alreadyOwns) throw new BadRequestException('Você já possui este edifício.');
 
     const { balance } = await this.economyService.getBalance(userId);
     if (balance < building.priceCoins) {

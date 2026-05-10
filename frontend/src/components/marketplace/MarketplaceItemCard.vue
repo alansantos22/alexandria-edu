@@ -1,7 +1,7 @@
 <template>
   <article
     class="c-mkt-card"
-    :class="[`c-mkt-card--${item.rarity}`, { 'c-mkt-card--owned': item.owned }]"
+    :class="[`c-mkt-card--${item.rarity}`, { 'c-mkt-card--owned': isOwned }]"
     @click="$emit('select', item)"
     tabindex="0"
     role="button"
@@ -12,10 +12,13 @@
 
     <!-- Badges top-right -->
     <div class="c-mkt-card__badges">
-      <span v-if="item.owned" class="c-mkt-card__badge c-mkt-card__badge--owned">
+      <span v-if="item.type === 'building' && item.ownedQty > 0" class="c-mkt-card__badge c-mkt-card__badge--owned">
+        ×{{ item.ownedQty }}
+      </span>
+      <span v-else-if="isOwned && item.type !== 'building'" class="c-mkt-card__badge c-mkt-card__badge--owned">
         ✓ Seu
       </span>
-      <span v-if="isSeasonal && !item.owned" class="c-mkt-card__badge c-mkt-card__badge--season">
+      <span v-if="isSeasonal && !isOwned" class="c-mkt-card__badge c-mkt-card__badge--season">
         ⏳ Temp.
       </span>
     </div>
@@ -63,13 +66,25 @@
         <span
           v-else
           class="c-mkt-card__price"
-          :class="{ 'c-mkt-card__price--cant-afford': !item.owned && !item.canAfford }"
+          :class="{ 'c-mkt-card__price--cant-afford': !item.canAfford }"
         >
           🪙 {{ item.priceCoins.toLocaleString('pt-BR') }}
         </span>
 
+        <!-- Buildings: always show Buy button (quantity system) -->
         <button
-          v-if="!item.owned"
+          v-if="item.type === 'building' && item.priceCoins > 0"
+          class="c-btn c-btn--sm"
+          :class="item.canAfford ? 'c-btn--primary' : 'c-btn--ghost'"
+          :disabled="!item.canAfford"
+          @click.stop="$emit('select', item)"
+        >
+          Comprar
+        </button>
+
+        <!-- Cosmetics: standard own/equip flow -->
+        <button
+          v-else-if="!isOwned && item.type !== 'building'"
           class="c-btn c-btn--sm"
           :class="item.canAfford || item.priceCoins === 0 ? 'c-btn--primary' : 'c-btn--ghost'"
           :disabled="!item.canAfford && item.priceCoins > 0"
@@ -79,16 +94,12 @@
         </button>
 
         <button
-          v-else-if="item.type !== 'building'"
+          v-else-if="isOwned && item.type !== 'building'"
           class="c-btn c-btn--sm c-btn--secondary"
           @click.stop="$emit('equip', item)"
         >
           Equipar
         </button>
-
-        <span v-else class="c-mkt-card__badge c-mkt-card__badge--owned" style="font-size:0.75rem;">
-          ✓ Desbloqueado
-        </span>
       </div>
     </div>
   </article>
@@ -122,6 +133,13 @@ const typeIcons = {
 
 const rarityLabel = rarityLabels[props.item.rarity] || props.item.rarity
 const typeIcon    = typeIcons[props.item.type]       || '🎁'
+
+// Buildings use ownedQty; cosmetics use owned boolean
+const isOwned = computed(() =>
+  props.item.type === 'building'
+    ? (props.item.ownedQty ?? 0) > 0
+    : !!props.item.owned,
+)
 
 // Wallpaper: imageUrl é um path direto (não começa com 'palette:')
 const wallpaperImageUrl = computed(() => {

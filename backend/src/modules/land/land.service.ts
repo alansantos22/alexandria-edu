@@ -30,7 +30,13 @@ export class LandService {
   ) {}
 
   async getLand(cityUserId: string): Promise<LandResponseDto> {
-    const owned    = await this.landRepository.findByCityUser(cityUserId)
+    let owned = await this.landRepository.findByCityUser(cityUserId)
+
+    // Auto-seed starting tiles on first access (user has never purchased/received tiles)
+    if (owned.length === 0) {
+      owned = await this.landRepository.seedStartingTiles(cityUserId, STARTING_TILES)
+    }
+
     const ownedSet = new Set(owned.map(t => `${t.tileX},${t.tileZ}`))
 
     const available: LandResponseDto['available'] = []
