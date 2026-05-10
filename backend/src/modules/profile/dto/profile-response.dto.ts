@@ -14,6 +14,7 @@ export interface ProfileCustomizationDto {
   frame:     EquippedItemDto | null;
   badge:     EquippedItemDto | null;
   avatar:    EquippedItemDto | null;
+  palette:   EquippedItemDto | null;
 }
 
 export interface BadgeDto {

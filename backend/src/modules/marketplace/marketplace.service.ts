@@ -100,7 +100,7 @@ export class MarketplaceService {
   async equipItem(
     userId: string,
     itemId: string | null,
-    type?: 'avatar' | 'wallpaper' | 'badge' | 'frame',
+    type?: 'avatar' | 'wallpaper' | 'badge' | 'frame' | 'palette',
   ): Promise<UserProfileCustomization> {
     // null = desequipar o slot
     if (itemId === null || itemId === undefined) {
@@ -133,6 +133,7 @@ export class MarketplaceService {
       activeFrameItemId:     'frame',
       activeBadgeItemId:     'badge',
       activeWallpaperItemId: 'wallpaper',
+      activePaletteItemId:   'palette',
     };
 
     const equippedItems: Partial<Record<ItemType, MarketplaceItem>> = {};

@@ -5,6 +5,8 @@ import { randomUUID } from 'crypto';
 import { CityMeta } from './entities/city-meta.entity';
 import { CityChunk } from './entities/city-chunk.entity';
 import { UserVehicle } from './entities/user-vehicle.entity';
+import { CityPaletteItem } from './entities/city-palette-item.entity';
+import { CityBuilding } from './entities/city-building.entity';
 
 @Injectable()
 export class CityRepository {
@@ -15,6 +17,10 @@ export class CityRepository {
     private readonly chunkRepo: Repository<CityChunk>,
     @InjectRepository(UserVehicle)
     private readonly vehicleRepo: Repository<UserVehicle>,
+    @InjectRepository(CityPaletteItem)
+    private readonly paletteRepo: Repository<CityPaletteItem>,
+    @InjectRepository(CityBuilding)
+    private readonly buildingRepo: Repository<CityBuilding>,
   ) {}
 
   // ── City Meta ──────────────────────────────────────────────
@@ -40,6 +46,15 @@ export class CityRepository {
       .createQueryBuilder()
       .update(CityMeta)
       .set({ totalBuildings: () => `GREATEST(total_buildings + ${delta}, 0)` })
+      .where('user_id = :userId', { userId })
+      .execute();
+  }
+
+  async updateCCU(userId: string, delta: number): Promise<void> {
+    await this.metaRepo
+      .createQueryBuilder()
+      .update(CityMeta)
+      .set({ ccuUsed: () => `GREATEST(LEAST(ccu_used + ${delta}, ccu_limit), 0)` })
       .where('user_id = :userId', { userId })
       .execute();
   }
@@ -108,6 +123,54 @@ export class CityRepository {
       const vehicle = this.vehicleRepo.create({ userId, vehicleType: 'skateboard', isActive: true });
       await this.vehicleRepo.save(vehicle);
     }
+  }
+
+  // ── Palette ───────────────────────────────────────────────
+
+  async findPalette(): Promise<CityPaletteItem[]> {
+    return this.paletteRepo.find({
+      where: { isActive: true as any },
+      order: { category: 'ASC', sortOrder: 'ASC' },
+    });
+  }
+
+  async findPaletteItem(id: string): Promise<CityPaletteItem | null> {
+    return this.paletteRepo.findOne({ where: { id, isActive: true as any } });
+  }
+
+  // ── Buildings ─────────────────────────────────────────────
+
+  async findBuildings(userId: string): Promise<CityBuilding[]> {
+    return this.buildingRepo.find({
+      where: { cityUserId: userId },
+      order: { placedAt: 'ASC' },
+    });
+  }
+
+  async findBuilding(id: string, userId: string): Promise<CityBuilding | null> {
+    return this.buildingRepo.findOne({ where: { id, cityUserId: userId } });
+  }
+
+  async createBuilding(
+    userId: string,
+    paletteItemId: string,
+    gridX: number,
+    gridZ: number,
+    rotation: number,
+  ): Promise<CityBuilding> {
+    const building = this.buildingRepo.create({
+      id: randomUUID(),
+      cityUserId: userId,
+      paletteItemId,
+      gridX,
+      gridZ,
+      rotation,
+    });
+    return this.buildingRepo.save(building);
+  }
+
+  async deleteBuilding(id: string, userId: string): Promise<void> {
+    await this.buildingRepo.delete({ id, cityUserId: userId });
   }
 
   // ── World Map ─────────────────────────────────────────

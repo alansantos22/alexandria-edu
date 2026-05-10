@@ -8,10 +8,13 @@ import { CityRepository, WorldCityInfo } from './city.repository';
 import { EconomyService } from '../economy/economy.service';
 import { UpsertChunkDto } from './dto/upsert-chunk.dto';
 import { PurchaseVehicleDto } from './dto/purchase-vehicle.dto';
+import { PlaceBuildingDto } from './dto/place-building.dto';
 import { VEHICLE_CATALOG } from './city.catalog';
 import { CityChunk } from './entities/city-chunk.entity';
 import { CityMeta } from './entities/city-meta.entity';
 import { UserVehicle } from './entities/user-vehicle.entity';
+import { CityPaletteItem } from './entities/city-palette-item.entity';
+import { CityBuilding } from './entities/city-building.entity';
 
 @Injectable()
 export class CityService {
@@ -61,6 +64,68 @@ export class CityService {
     }
 
     return chunk;
+  }
+
+  // ── Palette ───────────────────────────────────────────────
+
+  getPalette(): Promise<CityPaletteItem[]> {
+    return this.cityRepository.findPalette();
+  }
+
+  // ── Buildings ─────────────────────────────────────────────
+
+  getBuildings(userId: string): Promise<CityBuilding[]> {
+    return this.cityRepository.findBuildings(userId);
+  }
+
+  async placeBuilding(userId: string, dto: PlaceBuildingDto): Promise<CityBuilding> {
+    const meta = await this.cityRepository.findMeta(userId);
+    if (!meta) throw new NotFoundException('Cidade não encontrada.');
+
+    const item = await this.cityRepository.findPaletteItem(dto.paletteItemId);
+    if (!item) throw new NotFoundException('Item de construção não encontrado.');
+
+    // CCU budget check
+    const ccuAfter = meta.ccuUsed + item.ccuCost;
+    if (ccuAfter > meta.ccuLimit) {
+      throw new BadRequestException(
+        `CCU insuficiente. Necessário: ${item.ccuCost}. Disponível: ${meta.ccuLimit - meta.ccuUsed}.`,
+      );
+    }
+
+    // Grid overlap check
+    const existing = await this.cityRepository.findBuildings(userId);
+    const occupied = buildOccupancySet(existing);
+
+    for (let dx = 0; dx < item.sizeX; dx++) {
+      for (let dz = 0; dz < item.sizeZ; dz++) {
+        if (occupied.has(`${dto.gridX + dx},${dto.gridZ + dz}`)) {
+          throw new ConflictException(
+            `Posição ocupada em (${dto.gridX + dx}, ${dto.gridZ + dz}).`,
+          );
+        }
+      }
+    }
+
+    const building = await this.cityRepository.createBuilding(
+      userId,
+      dto.paletteItemId,
+      dto.gridX,
+      dto.gridZ,
+      dto.rotation ?? 0,
+    );
+
+    await this.cityRepository.updateCCU(userId, item.ccuCost);
+
+    return building;
+  }
+
+  async removeBuilding(userId: string, buildingId: string): Promise<void> {
+    const building = await this.cityRepository.findBuilding(buildingId, userId);
+    if (!building) throw new NotFoundException('Construção não encontrada.');
+
+    await this.cityRepository.deleteBuilding(buildingId, userId);
+    await this.cityRepository.updateCCU(userId, -building.paletteItem.ccuCost);
   }
 
   // ── Vehicles ──────────────────────────────────────────────
@@ -118,4 +183,17 @@ function countBuildings(dataHex: string): number {
     if (ch !== '0') count++;
   }
   return count;
+}
+
+/** Builds a Set of "gridX,gridZ" strings for all cells occupied by placed buildings. */
+function buildOccupancySet(buildings: CityBuilding[]): Set<string> {
+  const occupied = new Set<string>();
+  for (const b of buildings) {
+    for (let dx = 0; dx < b.paletteItem.sizeX; dx++) {
+      for (let dz = 0; dz < b.paletteItem.sizeZ; dz++) {
+        occupied.add(`${b.gridX + dx},${b.gridZ + dz}`);
+      }
+    }
+  }
+  return occupied;
 }

@@ -187,6 +187,67 @@
               </div>
             </div>
 
+            <!-- ─── Paleta de Cores ────────────────────────────── -->
+            <div v-if="activeTab === 'palette'" class="c-profile-customize__section">
+              <p class="c-profile-customize__hint">
+                Escolha uma paleta para personalizar as cores dos botões, bordas e acentos do seu perfil.
+                As paletas são criadas pela equipe e vendidas no
+                <router-link to="/marketplace" @click="$emit('close')" class="c-profile-customize__link">
+                  Marketplace
+                </router-link>.
+              </p>
+
+              <div class="c-profile-customize__grid">
+                <!-- Padrão -->
+                <button
+                  :class="['c-customize-item', { 'is-active': !equippedIds.palette }]"
+                  @click="unequip('palette')"
+                  title="Cores padrão"
+                >
+                  <div class="c-customize-item__palette-strip c-customize-item__palette-strip--default">
+                    <span class="c-customize-item__palette-dot" style="background:#6C5CE7" />
+                    <span class="c-customize-item__palette-dot" style="background:#4B3FBA" />
+                    <span class="c-customize-item__palette-dot" style="background:#00D9C0" />
+                    <span class="c-customize-item__palette-dot" style="background:#00A68F" />
+                    <span class="c-customize-item__palette-dot" style="background:#FF6B9D" />
+                  </div>
+                  <span class="c-customize-item__name">Padrão</span>
+                  <span v-if="!equippedIds.palette" class="c-customize-item__equipped">✓ Equipado</span>
+                </button>
+
+                <!-- Paletas do inventário -->
+                <button
+                  v-for="item in paletteItems"
+                  :key="item.id"
+                  :class="['c-customize-item', { 'is-active': equippedIds.palette === item.id }]"
+                  :title="item.name"
+                  @click="equip(item)"
+                >
+                  <div class="c-customize-item__palette-strip">
+                    <template v-for="(color, ci) in getPaletteColors(item.imageUrl)" :key="ci">
+                      <span
+                        class="c-customize-item__palette-dot"
+                        :style="{ background: color }"
+                      />
+                    </template>
+                  </div>
+                  <span class="c-customize-item__name">{{ item.name }}</span>
+                  <span :class="['c-customize-item__rarity', `c-customize-item__rarity--${item.rarity}`]">
+                    {{ rarityLabel[item.rarity] }}
+                  </span>
+                  <span v-if="equippedIds.palette === item.id" class="c-customize-item__equipped">✓ Equipado</span>
+                </button>
+              </div>
+
+              <div v-if="!paletteItems.length" class="c-profile-customize__empty">
+                <span>🎨</span>
+                <p>Você não tem paletas no inventário.</p>
+                <router-link to="/marketplace" @click="$emit('close')" class="c-btn c-btn--sm">
+                  Ir ao Marketplace
+                </router-link>
+              </div>
+            </div>
+
           </div><!-- /panel -->
         </template>
 
@@ -213,9 +274,9 @@ const emit = defineEmits(['close', 'updated'])
 
 const loading    = ref(true)
 const allItems   = ref([])
-const equippedIds = ref({ wallpaper: null, frame: null, badge: null, avatar: null })
+const equippedIds = ref({ wallpaper: null, frame: null, badge: null, avatar: null, palette: null })
 
-const activeTab        = ref('wallpaper')
+const activeTab        = ref('palette')
 const previewFrameItemId = ref(null)
 
 const bioText   = ref('')
@@ -338,10 +399,32 @@ const previewFrameStyle = computed(() => {
 
 const wallpaperItems = computed(() => allItems.value.filter(i => i.type === 'wallpaper'))
 const frameItems     = computed(() => allItems.value.filter(i => i.type === 'frame'))
+const paletteItems   = computed(() => allItems.value.filter(i => i.type === 'palette'))
+
+// ─── Helper: extrair as 5 cores de uma paleta para o preview ─────────────────
+
+function getPaletteColors(imageUrl) {
+  if (!imageUrl?.startsWith('palette:')) return []
+  try {
+    const p = JSON.parse(imageUrl.slice(8))
+    // Retorna os valores sólidos (primary pode ser gradient — extraímos a primeira cor)
+    const solid = (v) => {
+      if (!v) return '#6C5CE7'
+      if (v.startsWith('#')) return v
+      // Extrair primeira cor hex do gradient
+      const match = v.match(/#[0-9A-Fa-f]{6}/)
+      return match ? match[0] : '#6C5CE7'
+    }
+    return [solid(p.primary), p.primaryDark, p.secondary, p.secondaryDark, solid(p.tertiary)]
+  } catch {
+    return ['#6C5CE7', '#4B3FBA', '#00D9C0', '#00A68F', '#FF6B9D']
+  }
+}
 
 // ─── Configuração das abas com contadores ────────────────────────────────────
 
 const tabs = computed(() => [
+  { id: 'palette',   icon: '🎨', label: 'Paleta',       count: paletteItems.value.length },
   { id: 'wallpaper', icon: '🖼️', label: 'Wallpaper',   count: wallpaperItems.value.length },
   { id: 'frame',     icon: '✨', label: 'Frame Avatar', count: frameItems.value.length },
   { id: 'bio',       icon: '📝', label: 'Bio',          count: 0 },
@@ -368,12 +451,14 @@ onMounted(async () => {
       frame:     c?.frame?.id     ?? null,
       badge:     c?.badge?.id     ?? null,
       avatar:    c?.avatar?.id    ?? null,
+      palette:   c?.palette?.id   ?? null,
     }
 
     // Se o backend retornou profile do marketplace, usar como fallback
     if (customProfile) {
       if (!equippedIds.value.wallpaper) equippedIds.value.wallpaper = customProfile.activeWallpaperItemId
       if (!equippedIds.value.frame)     equippedIds.value.frame     = customProfile.activeFrameItemId
+      if (!equippedIds.value.palette)   equippedIds.value.palette   = customProfile.activePaletteItemId
     }
 
     previewFrameItemId.value = equippedIds.value.frame
@@ -721,6 +806,29 @@ async function saveBio() {
     border: 2px solid var(--color-primary);
 
     &--default { border-color: var(--color-primary); opacity: 0.5; }
+  }
+
+  // ─── Paleta: strip de 5 bolinhas coloridas ──────────────────
+  &__palette-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: $space-2 0;
+    width: 100%;
+
+    &--default { opacity: 0.6; }
+  }
+
+  &__palette-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+    transition: transform $dur-fast;
+
+    .c-customize-item:hover & { transform: scale(1.15); }
   }
 
   &__name {

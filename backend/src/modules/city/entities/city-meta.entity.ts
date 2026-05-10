@@ -33,6 +33,12 @@ export class CityMeta {
   @Column({ name: 'total_buildings', type: 'int', unsigned: true, default: 0 })
   totalBuildings: number;
 
+  @Column({ name: 'ccu_limit', type: 'smallint', unsigned: true, default: 2000 })
+  ccuLimit: number;
+
+  @Column({ name: 'ccu_used', type: 'smallint', unsigned: true, default: 0 })
+  ccuUsed: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 

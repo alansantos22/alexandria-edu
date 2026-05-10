@@ -1,5 +1,5 @@
 <template>
-  <div class="p-profile-page" :style="wallpaperStyle">
+  <div class="p-profile-page" :style="{ ...wallpaperStyle, ...paletteStyle }">
     <!-- Overlay suave sobre o wallpaper para manter legibilidade -->
     <div v-if="wallpaperStyle.background" class="p-profile-page__overlay" />
 
@@ -126,6 +126,46 @@ const wallpaperStyle = computed(() => {
   }
 })
 
+// ─── Paleta de cores dinâmica ─────────────────────────────────────────────────
+// Quando o usuário equipa uma paleta, as CSS vars do perfil são sobrescritas,
+// refletindo automaticamente em botões, bordas, XP bar e acentos.
+
+function hexToRgba(hex, alpha) {
+  if (!hex || !hex.startsWith('#') || hex.length < 7) return `rgba(0,217,192,${alpha})`
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r},${g},${b},${alpha})`
+}
+
+const paletteStyle = computed(() => {
+  const paletteItem = profile.value?.customization?.palette
+  if (!paletteItem?.imageUrl?.startsWith('palette:')) return {}
+
+  try {
+    const p = JSON.parse(paletteItem.imageUrl.slice(8))
+    return {
+      // Sobreescreve as CSS vars globais dentro do escopo .p-profile-page
+      '--color-primary':        p.primary,
+      '--color-primary-soft':   p.primary,
+      '--color-primary-deep':   p.primaryDark,
+      '--color-secondary':      p.secondary,
+      '--color-secondary-soft': p.secondary,
+      '--color-secondary-deep': p.secondaryDark,
+      '--color-accent':         p.tertiary,
+      '--color-accent-soft':    p.tertiary,
+      // Bordas e glass usam a cor secundária sólida
+      '--glass-border':         hexToRgba(p.secondary, 0.28),
+      '--border-subtle':        hexToRgba(p.secondary, 0.15),
+      // Gradientes derivados
+      '--gradient-violet':      p.primary,
+      '--gradient-mint':        p.secondary,
+    }
+  } catch {
+    return {}
+  }
+})
+
 // ─── Carregar perfil ──────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -157,8 +197,7 @@ function handleProfileUpdated({ type, item, value }) {
   profile.value.customization[type] = item
     ? { id: item.id, name: item.name, type: item.type, imageUrl: item.imageUrl, rarity: item.rarity }
     : null
-}
-</script>
+}</script>
 
 <style scoped lang="scss">
 .p-profile-page {

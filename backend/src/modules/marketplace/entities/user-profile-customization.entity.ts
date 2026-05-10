@@ -22,6 +22,9 @@ export class UserProfileCustomization {
   @Column({ name: 'active_wallpaper_item_id', type: 'varchar', length: 36, nullable: true })
   activeWallpaperItemId: string | null;
 
+  @Column({ name: 'active_palette_item_id', type: 'varchar', length: 36, nullable: true })
+  activePaletteItemId: string | null;
+
   @Column({ type: 'text', nullable: true })
   bio: string | null;
 

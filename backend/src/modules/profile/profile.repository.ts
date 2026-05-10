@@ -36,7 +36,7 @@ export class ProfileRepository {
     const custom = await this.customizationRepo.findOne({ where: { userId } });
 
     if (!custom) {
-      return { bio: null, wallpaper: null, frame: null, badge: null, avatar: null };
+      return { bio: null, wallpaper: null, frame: null, badge: null, avatar: null, palette: null };
     }
 
     const slotIds = [
@@ -44,6 +44,7 @@ export class ProfileRepository {
       custom.activeFrameItemId,
       custom.activeBadgeItemId,
       custom.activeAvatarItemId,
+      custom.activePaletteItemId,
     ].filter(Boolean) as string[];
 
     const items = slotIds.length
@@ -63,6 +64,7 @@ export class ProfileRepository {
       frame:     byId(custom.activeFrameItemId),
       badge:     byId(custom.activeBadgeItemId),
       avatar:    byId(custom.activeAvatarItemId),
+      palette:   byId(custom.activePaletteItemId),
     };
   }
 

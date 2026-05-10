@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
-export type ItemType = 'avatar' | 'wallpaper' | 'badge' | 'frame';
+export type ItemType = 'avatar' | 'wallpaper' | 'badge' | 'frame' | 'palette';
 export type Rarity   = 'common' | 'rare' | 'epic' | 'legendary';
 
 @Entity({ name: 'marketplace_items' })
@@ -21,7 +21,7 @@ export class MarketplaceItem {
   description: string | null;
 
   @Index('IDX_MKT_ITEM_TYPE')
-  @Column({ type: 'enum', enum: ['avatar', 'wallpaper', 'badge', 'frame'] })
+  @Column({ type: 'enum', enum: ['avatar', 'wallpaper', 'badge', 'frame', 'palette'] })
   type: ItemType;
 
   @Column({ name: 'image_url', type: 'varchar', length: 500, nullable: true })

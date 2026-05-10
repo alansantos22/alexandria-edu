@@ -6,12 +6,13 @@ import {
   MeshLambertMaterial, MeshBasicMaterial,
   InstancedMesh, Mesh,
   Matrix4, Vector3,
+  Raycaster, Plane,
 } from 'three'
 
 const CHUNK_SIZE = 16
-const CELL      = 1.4   // world units per grid cell
+const CELL       = 1.4   // world units per grid cell
 
-// type index → [heightY, hex color]
+// Procedural chunk type → [heightY, hex color]
 const BUILDING_DEFS = {
   1: [0.9,  0xc8bfe8],  // small house   (soft lavender)
   2: [1.6,  0x8b9dc3],  // medium house  (slate blue)
@@ -21,27 +22,54 @@ const BUILDING_DEFS = {
   6: [2.0,  0xff6b9d],  // landmark      (brand accent)
 }
 
+// City palette category → color
+const CATEGORY_COLORS = {
+  residential: 0xc8bfe8,
+  commercial:  0x8b9dc3,
+  nature:      0x2ecc71,
+  road:        0x636e72,
+  decoration:  0xff6b9d,
+}
+
+function _categoryHeight(item) {
+  if (item.category === 'nature')     return 0.3 * Math.max(item.sizeX, item.sizeZ)
+  if (item.category === 'decoration') return 0.5
+  if (item.category === 'road')       return 0.05
+  return Math.max(item.sizeX, item.sizeZ) * 0.9
+}
+
 export function useCityRenderer(canvasRef) {
   let renderer, scene, camera, animId
   let ground, grid
 
+  // Build mode internals
+  let buildGrid    = null
+  let ghostMesh    = null
+  let _buildHoverCb = null
+  let _buildClickCb = null
+  const placedMeshes = new Map()  // buildingId → Mesh
+  const raycaster    = new Raycaster()
+  const groundPlane  = new Plane(new Vector3(0, 1, 0), 0)
+
   // Mutable camera state (not reactive — updated inside rAF)
   const cam = {
-    target:  new Vector3(0, 0, 0),
-    angle:   Math.PI / 4,          // horizontal rotation (radians)
-    radius:  28,                    // distance from target projected on xz
-    elevation: 22,                  // fixed y height
-    frustum: 14,                    // orthographic half-size
+    target:     new Vector3(0, 0, 0),
+    angle:      Math.PI / 4,
+    radius:     28,
+    elevation:  22,
+    frustum:    14,
     minFrustum: 4,
     maxFrustum: 40,
   }
 
   // Pointer drag state
-  const drag = { active: false, button: -1, startX: 0, startZ: 0, lastX: 0, lastY: 0 }
+  const drag = { active: false, button: -1, startX: 0, startY: 0, lastX: 0, lastY: 0 }
+
+  let buildMode = false
 
   // Public reactive state
-  const ready       = ref(false)
-  const cityCenter  = ref({ x: 0, z: 0 })
+  const ready      = ref(false)
+  const cityCenter = ref({ x: 0, z: 0 })
 
   // ── Init ───────────────────────────────────────────────────────────
 
@@ -98,7 +126,6 @@ export function useCityRenderer(canvasRef) {
     Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40 })
     scene.add(sun)
 
-    // Soft fill from opposite direction
     const fill = new DirectionalLight(0x8e7df0, 0.25)
     fill.position.set(-10, 10, -10)
     scene.add(fill)
@@ -135,7 +162,7 @@ export function useCityRenderer(canvasRef) {
     canvas.addEventListener('mousedown',   _onMouseDown,  { passive: true })
     canvas.addEventListener('mousemove',   _onMouseMove,  { passive: true })
     canvas.addEventListener('mouseup',     _onMouseUp,    { passive: true })
-    canvas.addEventListener('mouseleave',  _onMouseUp,    { passive: true })
+    canvas.addEventListener('mouseleave',  _onMouseLeave, { passive: true })
     canvas.addEventListener('wheel',       _onWheel,      { passive: false })
     canvas.addEventListener('contextmenu', e => e.preventDefault())
   }
@@ -144,18 +171,25 @@ export function useCityRenderer(canvasRef) {
     canvas.removeEventListener('mousedown',  _onMouseDown)
     canvas.removeEventListener('mousemove',  _onMouseMove)
     canvas.removeEventListener('mouseup',    _onMouseUp)
-    canvas.removeEventListener('mouseleave', _onMouseUp)
+    canvas.removeEventListener('mouseleave', _onMouseLeave)
     canvas.removeEventListener('wheel',      _onWheel)
   }
 
   function _onMouseDown(e) {
-    drag.active = true
-    drag.button = e.button
-    drag.lastX  = e.clientX
-    drag.lastY  = e.clientY
+    drag.active  = true
+    drag.button  = e.button
+    drag.startX  = e.clientX
+    drag.startY  = e.clientY
+    drag.lastX   = e.clientX
+    drag.lastY   = e.clientY
   }
 
   function _onMouseMove(e) {
+    // Build mode hover (only when not dragging)
+    if (buildMode && !drag.active && _buildHoverCb) {
+      _buildHoverCb(e.clientX, e.clientY)
+    }
+
     if (!drag.active) return
     const dx = e.clientX - drag.lastX
     const dy = e.clientY - drag.lastY
@@ -163,20 +197,32 @@ export function useCityRenderer(canvasRef) {
     drag.lastY = e.clientY
 
     if (drag.button === 0) {
-      // Left drag → pan
+      // Left drag → pan (works in both modes)
       const panSpeed = cam.frustum * 0.012
       const right = new Vector3(Math.cos(cam.angle), 0, -Math.sin(cam.angle))
       const fwd   = new Vector3(-Math.sin(cam.angle), 0, -Math.cos(cam.angle))
       cam.target.addScaledVector(right, -dx * panSpeed)
       cam.target.addScaledVector(fwd,    dy * panSpeed)
-    } else if (drag.button === 2) {
-      // Right drag → orbit (horizontal only)
+    } else if (drag.button === 2 && !buildMode) {
+      // Right drag → orbit (disabled in build mode)
       cam.angle -= dx * 0.008
     }
     _positionCamera()
   }
 
-  function _onMouseUp() { drag.active = false }
+  function _onMouseUp(e) {
+    if (drag.active) {
+      const dist = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY)
+      if (buildMode && dist < 5 && _buildClickCb) {
+        _buildClickCb(e)
+      }
+    }
+    drag.active = false
+  }
+
+  function _onMouseLeave() {
+    drag.active = false
+  }
 
   function _onWheel(e) {
     e.preventDefault()
@@ -196,15 +242,14 @@ export function useCityRenderer(canvasRef) {
     camera.updateProjectionMatrix()
   }
 
-  // ── City loading ───────────────────────────────────────────────────
+  // ── Procedural city loading (chunk system) ─────────────────────────
 
-  const meshes = []   // { type, mesh }
+  const meshes = []
 
   function loadCity(chunks) {
     _clearMeshes()
     if (!chunks.length) return
 
-    // Collect cell positions per type
     const byType = new Map()
     for (const chunk of chunks) {
       for (const cell of _decodeChunk(chunk)) {
@@ -213,7 +258,6 @@ export function useCityRenderer(canvasRef) {
       }
     }
 
-    // Build InstancedMesh per type
     const mat4 = new Matrix4()
     byType.forEach((cells, type) => {
       const def = BUILDING_DEFS[type]
@@ -235,7 +279,6 @@ export function useCityRenderer(canvasRef) {
       meshes.push({ type, mesh })
     })
 
-    // Center camera on city bounds
     const allX = chunks.map(c => c.chunkX)
     const allZ = chunks.map(c => c.chunkZ)
     const cx = ((Math.min(...allX) + Math.max(...allX)) / 2 + 0.5) * CHUNK_SIZE * CELL
@@ -269,6 +312,172 @@ export function useCityRenderer(canvasRef) {
     meshes.length = 0
   }
 
+  // ── Build mode ─────────────────────────────────────────────────────
+
+  function enterBuildMode(buildings) {
+    buildMode = true
+
+    // Show fine build grid aligned to CELL (1.4 units): 100 cells × 1.4 = 140 units
+    if (!buildGrid) {
+      buildGrid = new GridHelper(140, 100, 0x6c5ce7, 0x3d2080)
+      buildGrid.material.opacity = 0
+      buildGrid.material.transparent = true
+      scene.add(buildGrid)
+    }
+    buildGrid.position.set(cam.target.x, 0.01, cam.target.z)
+    buildGrid.visible = true
+    _fadeBuildGrid(0, 0.7, 400)
+
+    // Load placed buildings into scene
+    for (const b of buildings) {
+      _addPlacedMesh(b)
+    }
+  }
+
+  function exitBuildMode() {
+    buildMode = false
+    _fadeBuildGrid(0.7, 0, 300, () => {
+      if (buildGrid) buildGrid.visible = false
+    })
+    _clearGhostMesh()
+    _clearPlacedMeshes()
+    _buildHoverCb = null
+    _buildClickCb = null
+  }
+
+  function setBuildCallbacks(onHover, onClick) {
+    _buildHoverCb = onHover
+    _buildClickCb = onClick
+  }
+
+  function raycastToGrid(clientX, clientY) {
+    const canvas = canvasRef.value
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const nx = ((clientX - rect.left) / rect.width)  * 2 - 1
+    const ny = -((clientY - rect.top)  / rect.height) * 2 + 1
+
+    raycaster.setFromCamera({ x: nx, y: ny }, camera)
+    const intersects = raycaster.intersectObject(ground)
+    if (!intersects.length) return null
+
+    const pt = intersects[0].point
+    return {
+      gridX: Math.floor(pt.x / CELL),
+      gridZ: Math.floor(pt.z / CELL),
+    }
+  }
+
+  function setGhostItem(item) {
+    _clearGhostMesh()
+    const w = item.sizeX * CELL * 0.92
+    const d = item.sizeZ * CELL * 0.92
+    const h = _categoryHeight(item)
+    const geo = new BoxGeometry(w, h, d)
+    const mat = new MeshBasicMaterial({
+      color: 0x00d9c0,
+      transparent: true,
+      opacity: 0.45,
+    })
+    ghostMesh = new Mesh(geo, mat)
+    ghostMesh.visible = false
+    scene.add(ghostMesh)
+  }
+
+  function moveGhost(gridX, gridZ, isValid) {
+    if (!ghostMesh) return
+    const geo    = ghostMesh.geometry
+    const h      = geo.parameters.height
+    const halfW  = (geo.parameters.width  / 0.92 * 0.92) / 2
+    const halfD  = (geo.parameters.depth  / 0.92 * 0.92) / 2
+    const sizeX  = Math.round(geo.parameters.width  / (CELL * 0.92))
+    const sizeZ  = Math.round(geo.parameters.depth  / (CELL * 0.92))
+    ghostMesh.position.set(
+      gridX * CELL + sizeX * CELL / 2,
+      h / 2,
+      gridZ * CELL + sizeZ * CELL / 2,
+    )
+    ghostMesh.material.color.setHex(isValid ? 0x00d9c0 : 0xff4444)
+    ghostMesh.material.opacity = isValid ? 0.45 : 0.35
+    ghostMesh.visible = true
+  }
+
+  function clearGhost() {
+    if (ghostMesh) ghostMesh.visible = false
+  }
+
+  function addPlacedBuilding(building) {
+    _addPlacedMesh(building)
+  }
+
+  function removePlacedBuilding(buildingId) {
+    const mesh = placedMeshes.get(buildingId)
+    if (!mesh) return
+    scene.remove(mesh)
+    mesh.geometry.dispose()
+    mesh.material.dispose()
+    placedMeshes.delete(buildingId)
+  }
+
+  function replacePlacedBuilding(oldId, newId) {
+    const mesh = placedMeshes.get(oldId)
+    if (!mesh) return
+    placedMeshes.delete(oldId)
+    placedMeshes.set(newId, mesh)
+    mesh.userData.buildingId = newId
+  }
+
+  function _addPlacedMesh(building) {
+    const item = building.paletteItem
+    if (!item) return
+    const w = item.sizeX * CELL * 0.92
+    const d = item.sizeZ * CELL * 0.92
+    const h = _categoryHeight(item)
+    const color = CATEGORY_COLORS[item.category] ?? 0xaaaaaa
+
+    const geo  = new BoxGeometry(w, h, d)
+    const mat  = new MeshLambertMaterial({ color })
+    const mesh = new Mesh(geo, mat)
+    mesh.castShadow = mesh.receiveShadow = true
+    mesh.position.set(
+      building.gridX * CELL + item.sizeX * CELL / 2,
+      h / 2,
+      building.gridZ * CELL + item.sizeZ * CELL / 2,
+    )
+    mesh.userData.buildingId = building.id
+    scene.add(mesh)
+    placedMeshes.set(building.id, mesh)
+  }
+
+  function _clearGhostMesh() {
+    if (!ghostMesh) return
+    scene.remove(ghostMesh)
+    ghostMesh.geometry.dispose()
+    ghostMesh.material.dispose()
+    ghostMesh = null
+  }
+
+  function _clearPlacedMeshes() {
+    placedMeshes.forEach((mesh) => {
+      scene.remove(mesh)
+      mesh.geometry.dispose()
+      mesh.material.dispose()
+    })
+    placedMeshes.clear()
+  }
+
+  function _fadeBuildGrid(from, to, durationMs, onDone) {
+    if (!buildGrid) return
+    const start = performance.now()
+    function step(now) {
+      const t = Math.min((now - start) / durationMs, 1)
+      buildGrid.material.opacity = from + (to - from) * t
+      if (t < 1) requestAnimationFrame(step)
+      else if (onDone) onDone()
+    }
+    requestAnimationFrame(step)
+  }
+
   // ── Resize ────────────────────────────────────────────────────────
 
   function resize() {
@@ -292,10 +501,24 @@ export function useCityRenderer(canvasRef) {
     cancelAnimationFrame(animId)
     _detachControls(canvasRef.value)
     _clearMeshes()
+    _clearPlacedMeshes()
+    _clearGhostMesh()
     ground?.geometry.dispose()
     ground?.material.dispose()
+    buildGrid?.geometry.dispose()
+    buildGrid?.material.dispose()
     renderer?.dispose()
   }
 
-  return { ready, cityCenter, init, loadCity, resize, dispose }
+  return {
+    ready, cityCenter,
+    // Core
+    init, loadCity, resize, dispose,
+    // Build mode
+    enterBuildMode, exitBuildMode,
+    setBuildCallbacks,
+    raycastToGrid,
+    setGhostItem, moveGhost, clearGhost,
+    addPlacedBuilding, removePlacedBuilding, replacePlacedBuilding,
+  }
 }

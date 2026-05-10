@@ -1,17 +1,23 @@
-import { IsEnum, IsHexColor, IsInt, IsOptional, IsString, MaxLength, Min, ValidateIf, IsIn, IsArray, ArrayMaxSize } from 'class-validator';
+import { IsEnum, IsHexColor, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { Rarity } from '../../marketplace/entities/marketplace-item.entity';
 
-export type GradientDirection =
-  | 'to right'
-  | 'to left'
-  | 'to bottom'
-  | 'to top'
-  | '45deg'
-  | '135deg'
-  | '90deg'
-  | 'radial';
-
+/**
+ * DTO para criação de paleta de cores no marketplace.
+ *
+ * Cada paleta define 5 papéis semânticos que o sistema aplica
+ * automaticamente em todo o perfil do usuário:
+ *
+ *  primary       → fundo de botões, barra de XP, badge de nível
+ *  primaryDark   → hover de botões, superfícies elevadas
+ *  secondary     → cor das bordas dos cards e painéis
+ *  secondaryDark → hover das bordas, acentos sutis
+ *  tertiary      → ícones destacados, links, chips de raridade
+ *
+ * Os campos `primary` e `tertiary` aceitam hex (#RRGGBB) ou
+ * qualquer CSS gradient válido (linear-gradient / radial-gradient).
+ * Os demais campos aceitam apenas hex sólido.
+ */
 export class CreatePaletteDto {
   @IsString()
   @MaxLength(120)
@@ -30,19 +36,25 @@ export class CreatePaletteDto {
   @Min(0)
   priceCoins: number;
 
-  /**
-   * Array de 1 a 4 cores hex.
-   * 1 cor = sólida; 2-4 cores = gradiente
-   */
-  @IsArray()
-  @ArrayMaxSize(4)
-  @IsHexColor({ each: true })
-  colors: string[];
+  /** Botões, barra XP, badge de nível — aceita hex ou CSS gradient */
+  @IsString()
+  @MaxLength(500)
+  primary: string;
 
-  /**
-   * Direção do gradiente — ignorado se colors.length === 1
-   */
-  @IsOptional()
-  @IsIn(['to right', 'to left', 'to bottom', 'to top', '45deg', '135deg', '90deg', 'radial'])
-  direction?: GradientDirection;
+  /** Hover de botões, fundos elevados — apenas hex */
+  @IsHexColor()
+  primaryDark: string;
+
+  /** Bordas dos cards e painéis — apenas hex */
+  @IsHexColor()
+  secondary: string;
+
+  /** Hover das bordas, acentos sutis — apenas hex */
+  @IsHexColor()
+  secondaryDark: string;
+
+  /** Ícones, links, chips de raridade — aceita hex ou CSS gradient */
+  @IsString()
+  @MaxLength(500)
+  tertiary: string;
 }

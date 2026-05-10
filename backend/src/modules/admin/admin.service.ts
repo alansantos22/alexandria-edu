@@ -71,25 +71,22 @@ export class AdminService {
   // ─── Paleta de cores ────────────────────────────────────────────────────────
 
   async createPalette(dto: CreatePaletteDto): Promise<MarketplaceItem> {
-    const { colors, direction = '135deg' } = dto;
+    // Serializa os 5 papéis semânticos como JSON dentro da imageUrl
+    // Formato: palette:{"primary":"...","primaryDark":"...","secondary":"...","secondaryDark":"...","tertiary":"..."}
+    const paletteData = {
+      primary:       dto.primary,
+      primaryDark:   dto.primaryDark,
+      secondary:     dto.secondary,
+      secondaryDark: dto.secondaryDark,
+      tertiary:      dto.tertiary,
+    };
 
-    let cssValue: string;
-
-    if (colors.length === 1) {
-      // Cor sólida
-      cssValue = colors[0];
-    } else if (direction === 'radial') {
-      cssValue = `radial-gradient(circle, ${colors.join(', ')})`;
-    } else {
-      cssValue = `linear-gradient(${direction}, ${colors.join(', ')})`;
-    }
-
-    const imageUrl = `css:${cssValue}`;
+    const imageUrl = `palette:${JSON.stringify(paletteData)}`;
 
     const item = this.itemRepo.create({
       name:        dto.name,
       description: dto.description ?? null,
-      type:        'wallpaper',
+      type:        'palette',
       imageUrl,
       priceCoins:  dto.priceCoins,
       rarity:      dto.rarity,

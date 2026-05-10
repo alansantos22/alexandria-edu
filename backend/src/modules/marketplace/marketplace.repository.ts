@@ -83,6 +83,7 @@ export class MarketplaceRepository {
       frame:     'activeFrameItemId',
       badge:     'activeBadgeItemId',
       wallpaper: 'activeWallpaperItemId',
+      palette:   'activePaletteItemId',
     };
 
     (profile as any)[slotMap[type]] = itemId;
@@ -97,6 +98,7 @@ export class MarketplaceRepository {
       frame:     'activeFrameItemId',
       badge:     'activeBadgeItemId',
       wallpaper: 'activeWallpaperItemId',
+      palette:   'activePaletteItemId',
     };
 
     (profile as any)[slotMap[type]] = null;

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -11,6 +12,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { UpsertChunkDto } from './dto/upsert-chunk.dto';
 import { PurchaseVehicleDto } from './dto/purchase-vehicle.dto';
+import { PlaceBuildingDto } from './dto/place-building.dto';
 
 @Controller('city')
 export class CityController {
@@ -26,6 +28,34 @@ export class CityController {
   @Patch('chunk')
   upsertChunk(@CurrentUser('id') userId: string, @Body() dto: UpsertChunkDto) {
     return this.cityService.upsertChunk(userId, dto);
+  }
+
+  // ── Palette ───────────────────────────────────────────────
+
+  @Get('palette')
+  @Public()
+  getPalette() {
+    return this.cityService.getPalette();
+  }
+
+  // ── Buildings ─────────────────────────────────────────────
+
+  @Get('buildings')
+  getMyBuildings(@CurrentUser('id') userId: string) {
+    return this.cityService.getBuildings(userId);
+  }
+
+  @Post('buildings')
+  placeBuilding(@CurrentUser('id') userId: string, @Body() dto: PlaceBuildingDto) {
+    return this.cityService.placeBuilding(userId, dto);
+  }
+
+  @Delete('buildings/:buildingId')
+  removeBuilding(
+    @CurrentUser('id') userId: string,
+    @Param('buildingId') buildingId: string,
+  ) {
+    return this.cityService.removeBuilding(userId, buildingId);
   }
 
   // ── Vehicles ─────────────────────────────────────────────

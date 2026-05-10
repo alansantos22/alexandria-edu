@@ -119,6 +119,7 @@ const filters = [
   { value: 'frame',     label: 'Molduras',   icon: '🪞' },
   { value: 'badge',     label: 'Emblemas',   icon: '🏅' },
   { value: 'wallpaper', label: 'Wallpapers', icon: '🖼️' },
+  { value: 'palette',   label: 'Paletas',    icon: '🎨' },
 ]
 
 const filteredItems = computed(() =>

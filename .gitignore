@@ -11,6 +11,9 @@ node_modules/
 dist/
 build/
 
+# Uploads (arquivos gerados localmente)
+uploads/
+
 # IDE
 .vscode/
 .idea/

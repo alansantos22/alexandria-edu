@@ -25,7 +25,26 @@
 
     <!-- Item visual -->
     <div class="c-mkt-card__visual">
-      <span class="c-mkt-card__type-icon">{{ typeIcon }}</span>
+      <!-- Wallpaper: mostra a imagem real -->
+      <img
+        v-if="item.type === 'wallpaper' && wallpaperImageUrl"
+        :src="wallpaperImageUrl"
+        class="c-mkt-card__wallpaper-thumb"
+        alt=""
+        loading="lazy"
+      />
+      <!-- Paleta: strip de 5 bolinhas coloridas -->
+      <div v-else-if="item.type === 'palette' && paletteColors"
+           class="c-mkt-card__palette-strip">
+        <span
+          v-for="(color, i) in paletteColors"
+          :key="i"
+          class="c-mkt-card__palette-dot"
+          :style="{ background: color }"
+        />
+      </div>
+      <!-- Fallback: emoji do tipo -->
+      <span v-else class="c-mkt-card__type-icon">{{ typeIcon }}</span>
     </div>
 
     <!-- Info -->
@@ -68,6 +87,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   item:       { type: Object, required: true },
   isSeasonal: { type: Boolean, default: false },
@@ -87,10 +108,37 @@ const typeIcons = {
   wallpaper: '🖼️',
   badge:     '🏅',
   frame:     '🪞',
+  palette:   '🎨',
 }
 
 const rarityLabel = rarityLabels[props.item.rarity] || props.item.rarity
 const typeIcon    = typeIcons[props.item.type]       || '🎁'
+
+// Wallpaper: imageUrl é um path direto (não começa com 'palette:')
+const wallpaperImageUrl = computed(() => {
+  const url = props.item.imageUrl
+  if (!url || url.startsWith('palette:')) return null
+  if (url.startsWith('http')) return url
+  // Caminho relativo como 'backgrounds/xyz.jpg' ou '/uploads/backgrounds/xyz.jpg'
+  const clean = url.replace(/^\/uploads\//, '').replace(/^\//, '')
+  return `/uploads/${clean}`
+})
+
+// Paleta: extrai as 5 cores do JSON armazenado em imageUrl
+const paletteColors = computed(() => {
+  const url = props.item.imageUrl
+  if (!url?.startsWith('palette:')) return null
+  try {
+    const data = JSON.parse(url.slice('palette:'.length))
+    return [
+      data.primary      || '#6C5CE7',
+      data.primaryDark  || '#4B3FBA',
+      data.secondary    || '#00D9C0',
+      data.secondaryDark|| '#00A68F',
+      data.tertiary     || '#FF6B9D',
+    ]
+  } catch { return null }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -184,6 +232,32 @@ const typeIcon    = typeIcons[props.item.type]       || '🎁'
     border-radius: $radius-md;
     background: $neutral-700;
     font-size: 2.5rem;
+    overflow: hidden;
+  }
+
+  &__wallpaper-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: $radius-md;
+    display: block;
+  }
+
+  &__palette-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0 $space-3;
+  }
+
+  &__palette-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.15);
+    flex-shrink: 0;
   }
 
   // ── Info ─────────────────────────────────────────────────────────────────

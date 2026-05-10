@@ -19,23 +19,31 @@
       <section class="p-admin__hero a-fade-in-up">
         <p class="u-text--eyebrow"><Settings :size="14" /> Painel</p>
         <h1>Centro de controle</h1>
-        <p class="u-text--subtle">
-          Atualize o link da mentoria ao vivo e configurações do sistema.
-        </p>
       </section>
 
-      <section class="c-bento p-admin__grid">
-        <!-- Live link card -->
+      <!-- ── Abas ─────────────────────────────────────────────────────────── -->
+      <nav class="p-admin__tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          :class="['p-admin__tab', { 'is-active': activeTab === tab.key }]"
+          @click="activeTab = tab.key"
+        >
+          <component :is="tab.icon" :size="16" />
+          {{ tab.label }}
+        </button>
+      </nav>
+
+      <!-- ── Painel ───────────────────────────────────────────────────────── -->
+      <section v-show="activeTab === 'painel'" class="c-bento p-admin__grid a-fade-in-up">
         <article class="c-card c-bento__cell--hero p-admin__live">
           <div class="c-card__icon"><Radio :size="22" /></div>
           <p class="c-card__eyebrow">Mentoria ao vivo</p>
           <h2 class="c-card__title">URL da sala</h2>
           <p class="c-card__body">
             Cole aqui o link do Google Meet, Zoom ou outra plataforma.
-            Os alunos verão o botão "Entrar na mentoria" assim que
-            estiver salvo.
+            Os alunos verão o botão "Entrar na mentoria" assim que estiver salvo.
           </p>
-
           <div class="c-field p-admin__live-field">
             <label class="c-field__label" for="live-link">
               <LinkIcon :size="16" /> Live URL
@@ -48,7 +56,6 @@
               placeholder="https://meet.google.com/..."
             />
           </div>
-
           <div class="p-admin__actions">
             <button class="c-btn" :disabled="loading" @click="updateLink">
               <Save :size="16" />
@@ -64,14 +71,12 @@
               <ExternalLink :size="14" /> Testar
             </a>
           </div>
-
           <p v-if="message" :class="success ? 'c-field__success' : 'c-field__error'">
             <component :is="success ? CircleCheck : CircleAlert" :size="16" />
             {{ message }}
           </p>
         </article>
 
-        <!-- Quick stats / shortcuts (mock visual) -->
         <article class="c-card c-card--secondary c-bento__cell">
           <div class="c-card__icon"><Users :size="22" /></div>
           <p class="c-card__eyebrow">Alunos</p>
@@ -85,13 +90,26 @@
           <h3 class="c-card__title">Aulas</h3>
           <p class="c-card__body">Em breve: criar e organizar trilhas.</p>
         </article>
+      </section>
 
-        <!-- Upload de backgrounds -->
+      <!-- ── Marketplace ──────────────────────────────────────────────────── -->
+      <section v-show="activeTab === 'marketplace'" class="c-bento p-admin__grid a-fade-in-up">
         <AdminUploadBackground @created="onItemCreated" />
-
-        <!-- Paleta de cores -->
         <AdminCreatePalette @created="onItemCreated" />
+      </section>
 
+      <!-- ── Conteúdo ─────────────────────────────────────────────────────── -->
+      <section v-show="activeTab === 'conteudo'" class="p-admin__empty a-fade-in-up">
+        <Library :size="40" class="p-admin__empty-icon" />
+        <h2>Gestão de Conteúdo</h2>
+        <p>Criação e organização de trilhas e aulas — em breve.</p>
+      </section>
+
+      <!-- ── Usuários ─────────────────────────────────────────────────────── -->
+      <section v-show="activeTab === 'usuarios'" class="p-admin__empty a-fade-in-up">
+        <Users :size="40" class="p-admin__empty-icon" />
+        <h2>Gestão de Usuários</h2>
+        <p>Papéis, permissões e histórico de alunos — em breve.</p>
       </section>
     </main>
   </div>
@@ -104,11 +122,20 @@ import api from '@/core/api'
 import {
   ShieldCheck, Crown, LogOut, Settings, Radio,
   Link as LinkIcon, Save, ExternalLink, CircleCheck, CircleAlert,
-  Users, Library,
+  Users, Library, ShoppingBag, LayoutDashboard,
 } from 'lucide-vue-next'
 
 import AdminUploadBackground from '@/components/admin/AdminUploadBackground.vue'
 import AdminCreatePalette    from '@/components/admin/AdminCreatePalette.vue'
+
+const tabs = [
+  { key: 'painel',      label: 'Painel',      icon: LayoutDashboard },
+  { key: 'marketplace', label: 'Marketplace',  icon: ShoppingBag },
+  { key: 'conteudo',    label: 'Conteúdo',     icon: Library },
+  { key: 'usuarios',    label: 'Usuários',     icon: Users },
+]
+
+const activeTab = ref('painel')
 
 const liveLink = ref('')
 const message  = ref('')
@@ -156,8 +183,10 @@ function onItemCreated(item) {
 </script>
 
 <style scoped lang="scss">
+@use '@/assets/scss/variables' as *;
+
 .p-admin {
-  &__hero { margin-bottom: $space-6; }
+  &__hero { margin-bottom: $space-4; }
 
   &__live {
     background:
@@ -171,5 +200,65 @@ function onItemCreated(item) {
     display: flex; flex-wrap: wrap; gap: $space-3; align-items: center;
     margin-bottom: $space-3;
   }
+
+  // ── Abas ──────────────────────────────────────────────────────────────────
+
+  &__tabs {
+    display: flex;
+    gap: $space-1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: $radius-lg;
+    padding: $space-1;
+    margin-bottom: $space-6;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  &__tab {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    padding: $space-2 $space-4;
+    border-radius: calc(#{$radius-lg} - 4px);
+    font-size: $fs-sm;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all $dur-fast $ease-out;
+
+    &:hover:not(.is-active) {
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+    }
+
+    &.is-active {
+      background: var(--color-primary);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(108, 92, 231, 0.35);
+    }
+  }
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+
+  &__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: $space-9 $space-4;
+    gap: $space-3;
+    color: var(--text-muted);
+
+    h2 { color: var(--text-secondary); font-size: $fs-lg; }
+    p  { font-size: $fs-sm; max-width: 360px; }
+  }
+
+  &__empty-icon { opacity: 0.3; }
 }
 </style>

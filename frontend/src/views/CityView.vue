@@ -1,5 +1,5 @@
 <template>
-  <div class="v-city">
+  <div class="v-city" :class="{ 'v-city--build': build.isActive.value }">
 
     <!-- Canvas WebGL -->
     <canvas ref="canvasRef" class="v-city__canvas" />
@@ -21,17 +21,19 @@
       </div>
     </Transition>
 
-    <!-- Empty city hint -->
+    <!-- Empty city hint (explore mode only) -->
     <Transition name="t-fade">
-      <div v-if="state === 'empty'" class="v-city__overlay v-city__overlay--empty">
+      <div v-if="state === 'empty' && !build.isActive.value" class="v-city__overlay v-city__overlay--empty">
         <p class="v-city__empty-title">Sua cidade está vazia</p>
-        <p class="v-city__empty-sub">Complete aulas para ganhar moedas e construir sua cidade.</p>
+        <p class="v-city__empty-sub">Use o Modo Construção para começar a construir.</p>
       </div>
     </Transition>
 
-    <!-- HUD — City info (top-left) -->
+    <!-- ── HUD (explore mode) ────────────────────────────────────────── -->
+
+    <!-- City info (top-left) -->
     <Transition name="t-slide-up">
-      <div v-if="state === 'ready' || state === 'empty'" class="v-city__hud-info">
+      <div v-if="showExploreHUD" class="v-city__hud-info">
         <div class="v-city__hud-title">
           <span class="v-city__hud-icon">🏙</span>
           <span>{{ displayName }}</span>
@@ -51,20 +53,83 @@
       </div>
     </Transition>
 
-    <!-- HUD — Active vehicle (bottom-center) -->
+    <!-- Active vehicle (bottom-center, explore mode only) -->
     <Transition name="t-slide-up">
-      <div v-if="activeVehicle && (state === 'ready' || state === 'empty')" class="v-city__hud-vehicle">
+      <div v-if="activeVehicle && showExploreHUD" class="v-city__hud-vehicle">
         <span class="v-city__hud-vehicle-icon">{{ vehicleIcon }}</span>
         <span class="v-city__hud-vehicle-name">{{ activeVehicle.vehicleType.replace('_', ' ') }}</span>
       </div>
     </Transition>
 
-    <!-- Controls hint (bottom-right) -->
-    <div v-if="state === 'ready' || state === 'empty'" class="v-city__hud-controls">
+    <!-- Controls hint (bottom-right, explore mode only) -->
+    <div v-if="showExploreHUD" class="v-city__hud-controls">
       <span>Arrastar · Pan</span>
       <span>Botão direito · Girar</span>
       <span>Scroll · Zoom</span>
     </div>
+
+    <!-- Build mode toggle (top-right, only for own city) -->
+    <Transition name="t-slide-up">
+      <button
+        v-if="canBuild && (state === 'ready' || state === 'empty')"
+        class="v-city__build-toggle"
+        :class="{ 'v-city__build-toggle--active': build.isActive.value }"
+        :title="build.isActive.value ? 'Sair do Modo Construção' : 'Modo Construção'"
+        @click="toggleBuildMode"
+      >
+        <span class="v-city__build-toggle-icon">🏗️</span>
+        <span>{{ build.isActive.value ? 'Sair' : 'Construir' }}</span>
+      </button>
+    </Transition>
+
+    <!-- ── HUD (build mode) ──────────────────────────────────────────── -->
+
+    <Transition name="t-slide-up">
+      <div v-if="build.isActive.value" class="v-city__hud-build">
+
+        <!-- CCU Bar -->
+        <CCUBar
+          :ccu-used="build.ccuUsed.value"
+          :ccu-limit="build.ccuLimit.value"
+          :percent="build.ccuPercent.value"
+        />
+
+        <!-- Selected item hint -->
+        <div v-if="build.selectedItem.value" class="v-city__hud-placing">
+          <span>{{ build.selectedItem.value.icon }}</span>
+          <span>{{ build.selectedItem.value.name }}</span>
+          <button class="v-city__hud-placing-cancel" @click="build.clearSelection()">✕</button>
+        </div>
+        <p v-else class="v-city__hud-hint">Selecione um item abaixo para construir</p>
+
+      </div>
+    </Transition>
+
+    <!-- Build hints (bottom-right, build mode) -->
+    <div v-if="build.isActive.value" class="v-city__hud-controls v-city__hud-controls--build">
+      <span>Click · Posicionar</span>
+      <span>Arrastar · Pan</span>
+      <span>Scroll · Zoom</span>
+    </div>
+
+    <!-- ── Build Dock ─────────────────────────────────────────────────── -->
+    <Transition name="t-build-dock">
+      <BuildDock
+        v-if="build.isActive.value"
+        v-model="build.activeCategory.value"
+        :items="build.categoryItems.value"
+        :selected-item="build.selectedItem.value"
+        @select="build.selectItem"
+      />
+    </Transition>
+
+    <!-- Build loading overlay (while fetching palette) -->
+    <Transition name="t-fade">
+      <div v-if="build.loading.value" class="v-city__overlay v-city__overlay--loading">
+        <div class="v-city__spinner" />
+        <span>Carregando paleta...</span>
+      </div>
+    </Transition>
 
   </div>
 </template>
@@ -73,7 +138,10 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCityRenderer } from '@/composables/useCityRenderer.js'
+import { useBuildMode } from '@/composables/useBuildMode.js'
 import { cityService } from '@/core/services/city.service.js'
+import CCUBar    from '@/components/city/CCUBar.vue'
+import BuildDock from '@/components/city/BuildDock.vue'
 
 // ── State ────────────────────────────────────────────────────────────
 const canvasRef = ref(null)
@@ -85,6 +153,7 @@ const vehicles  = ref([])
 const route      = useRoute()
 const isVisiting = computed(() => !!route.params.userId)
 const user       = computed(() => JSON.parse(localStorage.getItem('user') || 'null'))
+const canBuild   = computed(() => !isVisiting.value)
 
 const displayName = computed(() =>
   isVisiting.value ? (meta.value?.username ?? route.params.userId) : (user.value?.username ?? '—'),
@@ -101,8 +170,24 @@ const shortSeed = computed(() =>
   meta.value?.citySeed ? meta.value.citySeed.slice(0, 8) + '...' : '—',
 )
 
-// ── Renderer ──────────────────────────────────────────────────────────
-const { init, loadCity: renderChunks, resize, dispose } = useCityRenderer(canvasRef)
+const showExploreHUD = computed(() =>
+  !build.isActive.value && (state.value === 'ready' || state.value === 'empty'),
+)
+
+// ── Renderer + Build Mode ─────────────────────────────────────────────
+const renderer = useCityRenderer(canvasRef)
+const build    = useBuildMode(renderer)
+
+const { init, loadCity: renderChunks, resize, dispose } = renderer
+
+// ── Build mode toggle ─────────────────────────────────────────────────
+async function toggleBuildMode() {
+  if (build.isActive.value) {
+    build.deactivate()
+  } else {
+    await build.activate(meta.value)
+  }
+}
 
 // ── Data loading ──────────────────────────────────────────────────────
 async function loadCity() {
@@ -137,6 +222,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   ro.disconnect()
+  if (build.isActive.value) build.deactivate()
   dispose()
 })
 </script>
@@ -162,6 +248,8 @@ onBeforeUnmount(() => {
     &:active { cursor: grabbing; }
   }
 
+  &--build &__canvas { cursor: crosshair; }
+
   // ── Overlays ─────────────────────────────────────────────────────
   &__overlay {
     position: absolute;
@@ -175,21 +263,9 @@ onBeforeUnmount(() => {
     pointer-events: none;
     z-index: $z-content;
 
-    &--loading {
-      color: $neutral-400;
-      font-size: 0.9rem;
-      pointer-events: none;
-    }
-
-    &--error {
-      color: $state-error;
-      font-size: 0.9rem;
-      pointer-events: auto;
-    }
-
-    &--empty {
-      pointer-events: none;
-    }
+    &--loading { color: $neutral-400; font-size: 0.9rem; pointer-events: none; }
+    &--error   { color: $state-error; font-size: 0.9rem; pointer-events: auto; }
+    &--empty   { pointer-events: none; }
   }
 
   &__spinner {
@@ -215,7 +291,6 @@ onBeforeUnmount(() => {
     cursor: pointer;
     pointer-events: auto;
     transition: background $dur-fast $ease-out;
-
     &:hover { background: rgba($state-error, 0.28); }
   }
 
@@ -272,7 +347,6 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: $space-4;
     padding: $space-1 0;
-
     &--seed { margin-top: $space-1; }
   }
 
@@ -289,7 +363,6 @@ onBeforeUnmount(() => {
     font-weight: 600;
     color: $brand-primary-soft;
     font-family: var(--font-display);
-
     &--seed {
       font-size: 0.7rem;
       color: $neutral-500;
@@ -315,9 +388,8 @@ onBeforeUnmount(() => {
     border: 1px solid rgba($brand-secondary, 0.3);
     border-radius: $radius-pill;
     box-shadow: 0 0 18px rgba($brand-secondary, 0.15);
-
-    &-icon  { font-size: 1.1rem; }
-    &-name  {
+    &-icon { font-size: 1.1rem; }
+    &-name {
       font-size: 0.82rem;
       font-weight: 600;
       color: $brand-secondary-soft;
@@ -342,6 +414,95 @@ onBeforeUnmount(() => {
       color: $neutral-600;
       font-family: var(--font-display);
     }
+
+    &--build { bottom: 190px; }
+  }
+
+  // ── Build toggle button (top-right) ──────────────────────────────
+  &__build-toggle {
+    position: absolute;
+    top: $space-5;
+    right: $space-5;
+    z-index: $z-content;
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    padding: $space-2 $space-4;
+    background: rgba($neutral-900, 0.82);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba($neutral-600, 0.3);
+    border-radius: $radius-pill;
+    color: $neutral-200;
+    font-size: 0.82rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background $dur-fast $ease-out, border-color $dur-fast $ease-out,
+                box-shadow $dur-fast $ease-out;
+
+    &:hover {
+      background: rgba($brand-primary, 0.2);
+      border-color: rgba($brand-primary, 0.5);
+    }
+
+    &--active {
+      background: rgba($state-error, 0.15);
+      border-color: rgba($state-error, 0.4);
+      color: $state-error;
+      box-shadow: 0 0 12px rgba($state-error, 0.15);
+    }
+
+    &-icon { font-size: 1rem; }
+  }
+
+  // ── Build mode HUD (top-left area when build mode active) ──────
+  &__hud-build {
+    position: absolute;
+    top: $space-5;
+    left: $space-5;
+    z-index: $z-content;
+    display: flex;
+    flex-direction: column;
+    gap: $space-3;
+    padding: $space-4 $space-5;
+    background: rgba($neutral-900, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba($brand-primary, 0.25);
+    border-radius: $radius-lg;
+    min-width: 240px;
+    box-shadow: 0 0 20px rgba($brand-primary, 0.1);
+  }
+
+  &__hud-placing {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: $brand-secondary-soft;
+    font-family: var(--font-display);
+
+    &-cancel {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: $neutral-500;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 2px $space-1;
+      border-radius: $radius-sm;
+      transition: color $dur-fast $ease-out;
+      &:hover { color: $state-error; }
+    }
+  }
+
+  &__hud-hint {
+    font-size: 0.72rem;
+    color: $neutral-500;
+    font-family: var(--font-display);
+    margin: 0;
   }
 }
 
@@ -355,6 +516,11 @@ onBeforeUnmount(() => {
 .t-slide-up-leave-active { transition: opacity $dur-slow $ease-out, transform $dur-slow $ease-out; }
 .t-slide-up-enter-from,
 .t-slide-up-leave-to     { opacity: 0; transform: translateY(12px); }
+
+.t-build-dock-enter-active,
+.t-build-dock-leave-active { transition: opacity $dur-slow $ease-out, transform $dur-slow $ease-out; }
+.t-build-dock-enter-from,
+.t-build-dock-leave-to     { opacity: 0; transform: translateX(-50%) translateY(100%); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
