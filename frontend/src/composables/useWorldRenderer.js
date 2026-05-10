@@ -636,36 +636,6 @@ export function useWorldRenderer(canvasRef) {
     scene.add(mesh)
   }
 
-  function _spawnAmbientCars() {
-    const palette = [0x8b9dc3, 0x4a9eff, 0x00d9c0, 0xff6b9d, 0xffd166, 0xc8bfe8]
-    const carGeo  = new BoxGeometry(1.5, 0.65, 2.8)
-    const rng     = seededRng(0xf00dcafe)
-
-    const nearSegs = roadSegments.filter(s => Math.abs(s.coord) <= WORLD_SCALE)
-
-    nearSegs.forEach((seg, si) => {
-      for (let i = 0; i < 3; i++) {
-        const mat  = new MeshLambertMaterial({ color: palette[(si * 3 + i) % palette.length] })
-        const mesh = new Mesh(carGeo, mat)
-        mesh.castShadow = true
-
-        if (seg.axis === 'x') mesh.rotation.y = Math.PI / 2
-
-        const t    = rng()
-        const lane = i % 2 === 0 ? 1.1 : -1.1
-        const pos  = seg.from.clone().lerp(seg.to, t)
-
-        if (seg.axis === 'x') pos.z += lane
-        else                  pos.x += lane
-
-        mesh.position.set(pos.x, 0.42, pos.z)
-        mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane }
-        scene.add(mesh)
-        ambientCars.push(mesh)
-      }
-    })
-  }
-
   // ── Player vehicle ─────────────────────────────────────────────────────────────
   function _buildBoxVehicle(color = 0x6c5ce7) {
     const geo  = new BoxGeometry(1.4, 0.68, 2.8)
@@ -680,6 +650,13 @@ export function useWorldRenderer(canvasRef) {
     return mesh
   }
 
+  const API_BASE = import.meta.env.VITE_API_URL || ''
+
+  function _resolveUrl(url) {
+    if (!url) return null
+    return url.startsWith('http') ? url : `${API_BASE}${url}`
+  }
+
   function _applyGlbMaterial(root, matData) {
     if (!matData) return
     const texLoader = new TextureLoader()
@@ -690,19 +667,20 @@ export function useWorldRenderer(canvasRef) {
         metalness: matData.metalness ?? 0.0,
       })
       if (matData.textureAlbedo) {
-        const t = texLoader.load(matData.textureAlbedo)
+        const t = texLoader.load(_resolveUrl(matData.textureAlbedo))
         t.flipY = matData.flipY ?? false
         if (matData.albedoColorSpace !== 'linear') t.colorSpace = SRGBColorSpace
         m.map = t
       }
       if (matData.textureNormal) {
-        const t = texLoader.load(matData.textureNormal); t.flipY = matData.flipY ?? false; m.normalMap = t
+        const t = texLoader.load(_resolveUrl(matData.textureNormal)); t.flipY = matData.flipY ?? false; m.normalMap = t
       }
       if (matData.textureRoughnessMetalness) {
-        const t = texLoader.load(matData.textureRoughnessMetalness); t.flipY = matData.flipY ?? false
+        const t = texLoader.load(_resolveUrl(matData.textureRoughnessMetalness)); t.flipY = matData.flipY ?? false
         m.roughnessMap = m.metalnessMap = t
       }
       node.material = m
+      node.material.needsUpdate = true
     })
   }
 
@@ -776,6 +754,8 @@ export function useWorldRenderer(canvasRef) {
             root.castShadow = true
             if (seg.axis === 'x') root.rotation.y = Math.PI / 2
             root.position.set(pos.x, 0, pos.z)
+
+            _applyGlbMaterial(root, catalogItem.vehicleAsset?.material)
 
             // Coletar rodas para animação
             const wheelMeshes = []

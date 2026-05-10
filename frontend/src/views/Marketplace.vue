@@ -94,6 +94,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ShoppingBag } from 'lucide-vue-next'
+import api                          from '@/core/api.js'
 import { marketplaceService } from '@/core/services/marketplace.service.js'
 import { useEconomyStore }    from '@/core/store/economy.js'
 import MarketplaceItemCard    from '@/components/marketplace/MarketplaceItemCard.vue'
@@ -216,8 +217,15 @@ async function confirmPurchase() {
 // ── Equip ─────────────────────────────────────────────────────────────────
 async function handleEquip(item) {
   try {
-    await marketplaceService.equipItem(item.id)
-    showEquipToast(`${item.name} equipado!`)
+    if (item.type === 'vehicle') {
+      // Veículos usam endpoint próprio com o ID da linha user_vehicles
+      if (!item.userVehicleId) throw new Error('userVehicleId ausente')
+      await api.post(`/city/vehicles/${item.userVehicleId}/activate`)
+      showEquipToast(`${item.name} equipado! 🚗`)
+    } else {
+      await marketplaceService.equipItem(item.id)
+      showEquipToast(`${item.name} equipado!`)
+    }
   } catch {
     showEquipToast('Erro ao equipar o item.')
   }

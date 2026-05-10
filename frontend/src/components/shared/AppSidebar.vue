@@ -147,7 +147,8 @@ onMounted(async () => {
     fetchBalance()
     try {
       const { data } = await api.get('/city/vehicles')
-      ownedVehicles.value = data.vehicles ?? []
+      // API retorna UserVehicle[] diretamente (não { vehicles: [] })
+      ownedVehicles.value = Array.isArray(data) ? data : (data.vehicles ?? [])
     } catch { /* silencioso */ }
   }
 })
@@ -155,7 +156,7 @@ onMounted(async () => {
 async function equipVehicle(vehicle) {
   if (vehicle.isActive) return
   try {
-    await api.post(`/city/vehicles/${vehicle.id}/activate`)
+    await api.patch(`/city/vehicles/${vehicle.id}/activate`)
     ownedVehicles.value = ownedVehicles.value.map(v => ({ ...v, isActive: v.id === vehicle.id }))
   } catch (err) {
     console.error('Erro ao equipar veículo:', err)

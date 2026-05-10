@@ -79,9 +79,10 @@ const {
 async function load() {
   state.value = 'loading'
   try {
-    const [citiesData, vehiclesData] = await Promise.allSettled([
+    const [citiesData, vehiclesData, catalogData] = await Promise.allSettled([
       cityService.getWorldMap(),
       api.get('/city/vehicles'),
+      api.get('/city/vehicles/catalog'),
     ])
 
     cities = citiesData.status === 'fulfilled' ? citiesData.value : []
@@ -89,10 +90,13 @@ async function load() {
     let activeVehicle  = null
     let vehicleCatalog = []
     if (vehiclesData.status === 'fulfilled') {
-      const vData = vehiclesData.value.data
-      const userVehicles = vData.vehicles ?? []
+      // endpoint retorna UserVehicle[] direto (não { vehicles: [] })
+      const userVehicles = vehiclesData.value.data ?? []
       activeVehicle  = userVehicles.find(v => v.isActive) ?? null
-      vehicleCatalog = userVehicles.map(v => v.catalog).filter(Boolean)
+    }
+    if (catalogData.status === 'fulfilled') {
+      // catálogo global de veículos ativos — usado para popular as ruas
+      vehicleCatalog = catalogData.value.data?.catalog ?? []
     }
 
     loadWorld(cities, { activeVehicle, vehicleCatalog })

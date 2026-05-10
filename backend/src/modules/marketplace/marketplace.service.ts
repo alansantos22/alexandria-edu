@@ -32,6 +32,8 @@ export interface VehicleWithOwnership extends VehicleCatalog {
   owned: boolean;
   canAfford: boolean;
   rarity: 'common';
+  /** ID da linha user_vehicles (necessário para ativar o veículo) */
+  userVehicleId: string | null;
 }
 
 export interface VehiclesListResult {
@@ -302,14 +304,19 @@ export class MarketplaceService {
       this.economyService.getBalance(userId),
     ]);
 
-    const ownedSet = new Set(userVehicles.map(v => v.catalogId).filter(Boolean));
+    const ownedMap = new Map(
+      userVehicles
+        .filter(v => v.catalogId != null)
+        .map(v => [v.catalogId, v.id]),
+    );
 
     const vehicles: VehicleWithOwnership[] = catalog.map(v => ({
       ...v,
-      type:      'vehicle' as const,
-      rarity:    'common'  as const,
-      owned:     ownedSet.has(v.id),
-      canAfford: balance >= v.priceCoins,
+      type:          'vehicle' as const,
+      rarity:        'common'  as const,
+      owned:         ownedMap.has(v.id),
+      canAfford:     balance >= v.priceCoins,
+      userVehicleId: ownedMap.get(v.id) ?? null,
     }));
 
     return { vehicles, userBalance: balance };
