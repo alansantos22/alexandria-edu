@@ -7,7 +7,7 @@ import {
   InstancedMesh, Mesh, Group,
   Matrix4, Vector3,
   Points, PointsMaterial, BufferGeometry, Float32BufferAttribute,
-  BackSide,
+  BackSide, SRGBColorSpace, ACESFilmicToneMapping,
 } from 'three'
 import { SimplexNoise } from 'three/addons/math/SimplexNoise.js'
 
@@ -730,6 +730,9 @@ export function useWorldRenderer(canvasRef) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(W, H, false)
     renderer.shadowMap.enabled = true
+    renderer.outputColorSpace = SRGBColorSpace
+    renderer.toneMapping = ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.0
 
     scene = new Scene()
     scene.background = _bgColor

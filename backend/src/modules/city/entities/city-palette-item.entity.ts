@@ -45,6 +45,6 @@ export class CityPaletteItem {
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
-  @OneToOne(() => BuildingAsset, { nullable: true })
+  @OneToOne(() => BuildingAsset, (asset) => asset.paletteItem, { nullable: true })
   buildingAsset: BuildingAsset | null;
 }

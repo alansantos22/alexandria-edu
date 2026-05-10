@@ -29,6 +29,40 @@
       </div>
     </div>
 
+    <!-- ── Configurações de textura ──────────────────────────────── -->
+    <div class="p-admin__mat-config">
+      <div class="c-field">
+        <label class="c-field__label">Espaço de cor do Albedo</label>
+        <div class="p-admin__radio-group">
+          <label class="p-admin__radio">
+            <input v-model="form.albedoColorSpace" type="radio" value="srgb" />
+            <span>
+              <strong>sRGB</strong>
+              <small>PolyPerfect, Kenney, texturas de cor padrão</small>
+            </span>
+          </label>
+          <label class="p-admin__radio">
+            <input v-model="form.albedoColorSpace" type="radio" value="linear" />
+            <span>
+              <strong>Linear</strong>
+              <small>Unity HDRP, texturas técnicas (normal, roughness)</small>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="c-field">
+        <label class="p-admin__toggle">
+          <input v-model="form.flipY" type="checkbox" />
+          <span class="p-admin__toggle-track" />
+          <span>
+            <strong>Inverter UV vertical (flipY)</strong>
+            <small>Desativar para GLB/GLTF · Ativar para OBJ/FBX legado</small>
+          </span>
+        </label>
+      </div>
+    </div>
+
     <!-- ── Slots de textura ──────────────────────────────────────── -->
     <div class="p-admin__mat-slots">
       <div v-for="slot in texSlots" :key="slot.key" class="p-admin__mat-slot">
@@ -80,7 +114,7 @@ const saving  = ref(false)
 const message = ref('')
 const success = ref(false)
 
-const form = reactive({ name: '', roughness: 0.7, metalness: 0.0 })
+const form = reactive({ name: '', roughness: 0.7, metalness: 0.0, albedoColorSpace: 'srgb', flipY: false })
 
 const textures = reactive({
   texAlbedo:              null,
@@ -117,9 +151,11 @@ async function save() {
       if (file) fd.append(key, file)
     }
     const material = await adminCreateMaterial(fd, {
-      name:      form.name,
-      roughness: form.roughness,
-      metalness: form.metalness,
+      name:             form.name,
+      roughness:        form.roughness,
+      metalness:        form.metalness,
+      albedoColorSpace: form.albedoColorSpace,
+      flipY:            form.flipY,
     })
     success.value = true
     message.value = `Material "${material.name}" criado!`
@@ -128,6 +164,8 @@ async function save() {
     form.name      = ''
     form.roughness = 0.7
     form.metalness = 0.0
+    form.albedoColorSpace = 'srgb'
+    form.flipY     = false
     Object.keys(textures).forEach(k => (textures[k] = null))
   } catch (err) {
     success.value = false
@@ -210,5 +248,89 @@ async function save() {
   font-size: 0.62rem;
   color: var(--text-subtle);
   line-height: 1.3;
+}
+
+.p-admin__mat-config {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+  padding: $space-3;
+  border: 1px solid var(--glass-border);
+  border-radius: $radius-md;
+  background: var(--bg-base);
+}
+
+.p-admin__radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+  margin-top: $space-1;
+}
+
+.p-admin__radio {
+  display: flex;
+  align-items: flex-start;
+  gap: $space-2;
+  cursor: pointer;
+  padding: $space-2;
+  border-radius: $radius-sm;
+  border: 1px solid var(--border-subtle);
+  transition: border-color $dur-fast;
+
+  &:has(input:checked) { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
+
+  input { margin-top: 3px; accent-color: var(--color-primary); flex-shrink: 0; }
+
+  span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    strong { font-size: $fs-sm; color: var(--text-primary); }
+    small  { font-size: 0.65rem; color: var(--text-subtle); }
+  }
+}
+
+.p-admin__toggle {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  cursor: pointer;
+
+  input { display: none; }
+
+  &:has(input:checked) .p-admin__toggle-track {
+    background: var(--color-primary);
+    &::after { transform: translateX(18px); }
+  }
+
+  span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    strong { font-size: $fs-sm; color: var(--text-primary); }
+    small  { font-size: 0.65rem; color: var(--text-subtle); }
+  }
+}
+
+.p-admin__toggle-track {
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  position: relative;
+  transition: background $dur-fast;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform $dur-fast;
+  }
 }
 </style>

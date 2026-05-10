@@ -15,7 +15,10 @@
         <Box :size="28" style="opacity:.25" />
         <span>Selecione um GLB para visualizar</span>
       </div>
-      <span class="p-admin__building-preview-label">Preview ao vivo</span>
+      <span class="p-admin__building-preview-label">
+      Preview ao vivo
+      <span v-if="materialLoading" class="p-admin__mat-loading">· aplicando material…</span>
+    </span>
       <div v-if="previewReady" class="p-admin__zoom-controls">
         <button type="button" class="p-admin__zoom-btn" title="Zoom in" @click="zoomIn">
           <ZoomIn :size="16" />
@@ -145,10 +148,22 @@
 
       <div class="c-field">
         <label class="c-field__label">Material</label>
-        <select v-model="form.materialId" class="c-field__input">
-          <option value="">— Sem material —</option>
-          <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.name }}</option>
-        </select>
+        <div class="p-admin__mat-row">
+          <select v-model="form.materialId" class="c-field__input">
+            <option value="">— Sem material —</option>
+            <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </select>
+          <button
+            v-if="form.materialId"
+            type="button"
+            class="p-admin__edit-mat-btn"
+            :class="{ 'is-active': editingMaterial }"
+            :title="editingMaterial ? 'Fechar editor' : 'Editar material'"
+            @click="editingMaterial ? closeMaterialEditor() : openMaterialEditor()"
+          >
+            <component :is="editingMaterial ? X : Pencil" :size="15" />
+          </button>
+        </div>
         <span v-if="!materials.length" class="c-field__hint">
           Nenhum material disponível. Crie um na seção ao lado e clique em
           <button type="button" class="p-admin__refresh-btn" @click="loadMaterials">↺ atualizar</button>.
@@ -157,6 +172,79 @@
           ↺ atualizar lista
         </button>
       </div>
+
+      <!-- Editor inline do material selecionado -->
+      <transition name="mat-editor">
+        <div v-if="editingMaterial && form.materialId" class="p-admin__mat-editor">
+          <p class="p-admin__mat-editor-title">Editar: {{ materials.find(m => m.id === form.materialId)?.name }}</p>
+
+          <!-- Sliders -->
+          <div class="p-admin__mat-pbr-row">
+            <div class="c-field">
+              <label class="c-field__label">Roughness <span class="p-admin__val">{{ matEdit.roughness.toFixed(2) }}</span></label>
+              <input v-model.number="matEdit.roughness" class="p-admin__slider" type="range" min="0" max="1" step="0.01" />
+            </div>
+            <div class="c-field">
+              <label class="c-field__label">Metalness <span class="p-admin__val">{{ matEdit.metalness.toFixed(2) }}</span></label>
+              <input v-model.number="matEdit.metalness" class="p-admin__slider" type="range" min="0" max="1" step="0.01" />
+            </div>
+          </div>
+
+          <!-- Color space -->
+          <div class="c-field">
+            <label class="c-field__label">Espaço de cor do Albedo</label>
+            <div class="p-admin__radio-row">
+              <label class="p-admin__radio-chip" :class="{ 'is-active': matEdit.albedoColorSpace === 'srgb' }">
+                <input v-model="matEdit.albedoColorSpace" type="radio" value="srgb" hidden />
+                sRGB <small>(PolyPerfect, Kenney)</small>
+              </label>
+              <label class="p-admin__radio-chip" :class="{ 'is-active': matEdit.albedoColorSpace === 'linear' }">
+                <input v-model="matEdit.albedoColorSpace" type="radio" value="linear" hidden />
+                Linear <small>(Unity HDRP)</small>
+              </label>
+            </div>
+          </div>
+
+          <!-- flipY -->
+          <div class="c-field">
+            <label class="p-admin__toggle-row">
+              <input v-model="matEdit.flipY" type="checkbox" hidden />
+              <span class="p-admin__track" :class="{ 'is-on': matEdit.flipY }" />
+              <span class="p-admin__toggle-label">
+                <strong>Inverter UV vertical (flipY)</strong>
+                <small>OFF = GLB/GLTF · ON = OBJ/FBX legado</small>
+              </span>
+            </label>
+          </div>
+
+          <!-- Texturas (substituição opcional) -->
+          <p class="p-admin__mat-tex-label">Substituir texturas (opcional)</p>
+          <div class="p-admin__mat-slots">
+            <div v-for="slot in matTexSlots" :key="slot.key" class="p-admin__mat-slot">
+              <div
+                class="p-admin__mat-drop"
+                :class="{ 'is-filled': matEditTextures[slot.key] }"
+                @click="$refs[`eref_${slot.key}`][0].click()"
+                @dragover.prevent
+                @drop.prevent="e => matEditTextures[slot.key] = e.dataTransfer.files[0] ?? null"
+              >
+                <span class="p-admin__mat-drop-name">{{ matEditTextures[slot.key] ? matEditTextures[slot.key].name : slot.label }}</span>
+              </div>
+              <input :ref="`eref_${slot.key}`" type="file" accept="image/*" hidden @change="e => matEditTextures[slot.key] = e.target.files[0] ?? null" />
+              <span class="p-admin__mat-desc">{{ slot.description }}</span>
+            </div>
+          </div>
+
+          <div class="p-admin__mat-editor-actions">
+            <button class="c-btn c-btn--sm" :disabled="savingMaterial" @click="saveMaterialEdits">
+              {{ savingMaterial ? 'Salvando…' : 'Salvar alterações' }}
+            </button>
+            <p v-if="materialSaveMsg" :class="materialSaveOk ? 'c-field__success' : 'c-field__error'" class="p-admin__mat-save-msg">
+              {{ materialSaveMsg }}
+            </p>
+          </div>
+        </div>
+      </transition>
 
       <div class="c-field">
         <label class="c-field__label">
@@ -186,26 +274,90 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import {
-  Box, Layers, Upload, Sparkles,
+  Box, Layers, Upload, Sparkles, Pencil, X,
   CircleCheck, CircleAlert, ZoomIn, ZoomOut, Ruler, AlertTriangle,
 } from 'lucide-vue-next'
 import {
   WebGLRenderer, Scene, PerspectiveCamera, AmbientLight, DirectionalLight,
-  Color, MeshStandardMaterial, Box3, Vector3,
+  Color, MeshStandardMaterial, Box3, Vector3, TextureLoader, SRGBColorSpace,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { adminCreateBuilding, adminListMaterials } from '@/core/services/admin.service.js'
+import { adminCreateBuilding, adminListMaterials, adminUpdateMaterial } from '@/core/services/admin.service.js'
 
 const emit = defineEmits(['created'])
 
-const saving       = ref(false)
-const message      = ref('')
-const success      = ref(false)
-const previewReady = ref(false)
-const previewCanvas = ref(null)
-const emojiOpen     = ref(false)
-const suggestedSize = ref(null)
-const materials     = ref([])
+const saving          = ref(false)
+const message         = ref('')
+const success         = ref(false)
+const previewReady    = ref(false)
+const previewCanvas   = ref(null)
+const emojiOpen       = ref(false)
+const suggestedSize   = ref(null)
+const materials       = ref([])
+const materialLoading = ref(false)
+
+// ─── Inline material editor ───────────────────────────────────────────────
+const editingMaterial    = ref(false)
+const savingMaterial     = ref(false)
+const materialSaveMsg    = ref('')
+const materialSaveOk     = ref(false)
+const matEditTextures    = reactive({ texAlbedo: null, texNormal: null, texRoughnessMetalness: null, texAo: null, texEmissive: null })
+const matEdit = reactive({ roughness: 0.7, metalness: 0.0, albedoColorSpace: 'srgb', flipY: false })
+
+const matTexSlots = [
+  { key: 'texAlbedo',             label: 'Base Color',         description: 'Substituir albedo' },
+  { key: 'texNormal',             label: 'Normal Map',          description: 'Substituir normal' },
+  { key: 'texRoughnessMetalness', label: 'Roughness/Metalness', description: 'Substituir RM' },
+  { key: 'texAo',                 label: 'Ambient Occlusion',   description: 'Substituir AO' },
+  { key: 'texEmissive',           label: 'Emissive',            description: 'Substituir emissive' },
+]
+
+function openMaterialEditor() {
+  const mat = materials.value.find(m => m.id === form.materialId)
+  if (!mat) return
+  matEdit.roughness        = mat.roughness ?? 0.7
+  matEdit.metalness        = mat.metalness ?? 0.0
+  matEdit.albedoColorSpace = mat.albedoColorSpace ?? 'srgb'
+  matEdit.flipY            = mat.flipY ?? false
+  Object.keys(matEditTextures).forEach(k => (matEditTextures[k] = null))
+  materialSaveMsg.value = ''
+  editingMaterial.value = true
+}
+
+function closeMaterialEditor() {
+  editingMaterial.value = false
+}
+
+async function saveMaterialEdits() {
+  const mat = materials.value.find(m => m.id === form.materialId)
+  if (!mat) return
+  savingMaterial.value  = true
+  materialSaveMsg.value = ''
+  try {
+    const fd = new FormData()
+    for (const [key, file] of Object.entries(matEditTextures)) {
+      if (file) fd.append(key, file)
+    }
+    const updated = await adminUpdateMaterial(mat.id, fd, {
+      roughness:        matEdit.roughness,
+      metalness:        matEdit.metalness,
+      albedoColorSpace: matEdit.albedoColorSpace,
+      flipY:            matEdit.flipY,
+    })
+    // Atualiza lista local
+    const idx = materials.value.findIndex(m => m.id === updated.id)
+    if (idx !== -1) materials.value[idx] = updated
+    materialSaveOk.value  = true
+    materialSaveMsg.value = 'Material salvo!'
+    // Re-aplica no preview
+    applyMaterialToPreview(updated)
+  } catch (err) {
+    materialSaveOk.value  = false
+    materialSaveMsg.value = err.response?.data?.message || 'Erro ao salvar material.'
+  } finally {
+    savingMaterial.value = false
+  }
+}
 
 // ─── Emoji picker ──────────────────────────────────────────────────────────
 
@@ -328,6 +480,55 @@ function initPreview() {
   })
 }
 
+const DEFAULT_MAT = () => new MeshStandardMaterial({ roughness: 0.7, metalness: 0.0, color: 0xc8bfe8 })
+
+const texLoader = new TextureLoader()
+
+function _loadTex(url, flipY = false) {
+  if (!url) return null
+  const t = texLoader.load(url)
+  t.flipY = flipY
+  return t
+}
+
+function _loadColorTex(url, flipY = false) {
+  const t = _loadTex(url, flipY)
+  if (t) t.colorSpace = SRGBColorSpace
+  return t
+}
+
+async function applyMaterialToPreview(mat) {
+  if (!currentModel) return
+  materialLoading.value = true
+
+  const isLinear = mat?.albedoColorSpace === 'linear'
+  const flipY    = mat?.flipY ?? false
+
+  let pbr
+  if (!mat) {
+    pbr = DEFAULT_MAT()
+  } else {
+    pbr = new MeshStandardMaterial({
+      roughness: mat.roughness ?? 0.7,
+      metalness: mat.metalness ?? 0.0,
+    })
+    if (mat.textureAlbedo)             pbr.map                   = isLinear ? _loadTex(mat.textureAlbedo, flipY) : _loadColorTex(mat.textureAlbedo, flipY)
+    if (mat.textureNormal)             pbr.normalMap              = _loadTex(mat.textureNormal, flipY)
+    if (mat.textureRoughnessMetalness) pbr.roughnessMetalnessMap  = _loadTex(mat.textureRoughnessMetalness, flipY)
+    if (mat.textureAo)                 pbr.aoMap                  = _loadTex(mat.textureAo, flipY)
+    if (mat.textureEmissive)           { pbr.emissiveMap = _loadColorTex(mat.textureEmissive, flipY); pbr.emissive.set(0xffffff) }
+  }
+
+  currentModel.traverse(n => {
+    if (n.isMesh) {
+      n.material = pbr
+      n.material.needsUpdate = true
+    }
+  })
+
+  materialLoading.value = false
+}
+
 function loadPreviewModel(file) {
   if (!renderer) return
   if (modelUrl) URL.revokeObjectURL(modelUrl)
@@ -337,15 +538,22 @@ function loadPreviewModel(file) {
   new GLTFLoader().load(modelUrl, (gltf) => {
     currentModel = gltf.scene
     currentModel.scale.setScalar(form.scaleFactor)
+
+    const selectedMat = materials.value.find(m => m.id === form.materialId) ?? null
+    const baseMat = selectedMat
+      ? new MeshStandardMaterial({ roughness: selectedMat.roughness ?? 0.7, metalness: selectedMat.metalness ?? 0.0 })
+      : DEFAULT_MAT()
+
     currentModel.traverse(n => {
-      if (n.isMesh) {
-        n.material = new MeshStandardMaterial({ roughness: 0.7, metalness: 0.0, color: 0xc8bfe8 })
-        n.castShadow = true
-      }
+      if (n.isMesh) { n.material = baseMat; n.castShadow = true }
     })
+
     scene.add(currentModel)
     _fitCameraToModel(currentModel)
     previewReady.value = true
+
+    // apply full textures after model is in scene
+    applyMaterialToPreview(selectedMat)
   }, undefined, (err) => console.warn('Preview GLB load error:', err))
 }
 
@@ -360,6 +568,23 @@ onBeforeUnmount(() => {
 watch(() => form.scaleFactor, (v) => {
   if (currentModel) currentModel.scale.setScalar(v)
 })
+
+watch(() => form.materialId, (id) => {
+  editingMaterial.value = false
+  const mat = materials.value.find(m => m.id === id) ?? null
+  applyMaterialToPreview(mat)
+})
+
+// live preview enquanto edita o material
+watch(
+  () => [matEdit.roughness, matEdit.metalness, matEdit.albedoColorSpace, matEdit.flipY],
+  () => {
+    const mat = materials.value.find(m => m.id === form.materialId)
+    if (!mat || !editingMaterial.value) return
+    // mescla os valores editados temporariamente para preview
+    applyMaterialToPreview({ ...mat, ...matEdit })
+  },
+)
 
 // ─── Handlers de arquivo ──────────────────────────────────────────────────
 
@@ -468,6 +693,17 @@ async function save() {
   font-size: $fs-sm;
   color: var(--text-subtle);
   pointer-events: none;
+}
+
+.p-admin__mat-loading {
+  color: var(--accent);
+  opacity: 0.8;
+  animation: mat-blink 1s ease-in-out infinite alternate;
+}
+
+@keyframes mat-blink {
+  from { opacity: 0.4 }
+  to   { opacity: 1 }
 }
 
 .p-admin__building-preview-label {
@@ -615,4 +851,189 @@ async function save() {
 
   &:hover { color: var(--color-secondary); }
 }
+
+// ── Material editor inline ────────────────────────────────────────────────────
+
+.p-admin__mat-row {
+  display: flex;
+  gap: $space-2;
+  align-items: center;
+
+  .c-field__input { flex: 1; }
+}
+
+.p-admin__edit-mat-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: $radius-md;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all $dur-fast;
+
+  &:hover  { border-color: var(--color-primary); color: var(--color-primary); }
+  &.is-active { border-color: var(--color-accent); color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+}
+
+.p-admin__mat-editor {
+  border: 1px solid var(--glass-border);
+  border-radius: $radius-md;
+  padding: $space-3;
+  background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+.p-admin__mat-editor-title {
+  font-size: $fs-sm;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.p-admin__mat-pbr-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $space-3;
+}
+
+.p-admin__radio-row {
+  display: flex;
+  gap: $space-2;
+  margin-top: $space-1;
+  flex-wrap: wrap;
+}
+
+.p-admin__radio-chip {
+  padding: $space-1 $space-3;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: $fs-xs;
+  cursor: pointer;
+  transition: all $dur-fast;
+  color: var(--text-muted);
+
+  small { opacity: 0.7; margin-left: 4px; }
+
+  &.is-active {
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+    color: var(--color-primary);
+  }
+}
+
+.p-admin__toggle-row {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  cursor: pointer;
+}
+
+.p-admin__track {
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  position: relative;
+  transition: background $dur-fast;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform $dur-fast;
+  }
+
+  &.is-on {
+    background: var(--color-primary);
+    &::after { transform: translateX(18px); }
+  }
+}
+
+.p-admin__toggle-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  strong { font-size: $fs-sm; color: var(--text-primary); }
+  small  { font-size: 0.65rem; color: var(--text-subtle); }
+}
+
+.p-admin__mat-tex-label {
+  font-size: $fs-xs;
+  color: var(--text-subtle);
+  margin: 0;
+}
+
+.p-admin__mat-slots {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space-2;
+}
+
+.p-admin__mat-slot {
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+.p-admin__mat-drop {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-2 $space-2;
+  border: 1px dashed var(--border-subtle);
+  border-radius: $radius-md;
+  cursor: pointer;
+  font-size: $fs-xs;
+  color: var(--text-muted);
+  min-height: 36px;
+  transition: all $dur-fast;
+  background: var(--bg-base);
+
+  &:hover   { border-color: var(--color-primary); color: var(--text-secondary); }
+  &.is-filled { border-color: var(--color-secondary); color: var(--text-primary); background: var(--bg-surface); }
+}
+
+.p-admin__mat-drop-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.p-admin__mat-desc {
+  font-size: 0.62rem;
+  color: var(--text-subtle);
+  line-height: 1.3;
+}
+
+.p-admin__mat-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  flex-wrap: wrap;
+}
+
+.p-admin__mat-save-msg {
+  font-size: $fs-xs;
+  margin: 0;
+}
+
+.mat-editor-enter-active,
+.mat-editor-leave-active { transition: opacity $dur-fast, transform $dur-fast; }
+.mat-editor-enter-from,
+.mat-editor-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

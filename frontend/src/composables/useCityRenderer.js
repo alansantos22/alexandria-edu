@@ -7,6 +7,7 @@ import {
   InstancedMesh, Mesh,
   Matrix4, Vector3,
   Raycaster, Plane, TextureLoader,
+  SRGBColorSpace, ACESFilmicToneMapping,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
@@ -83,6 +84,9 @@ export function useCityRenderer(canvasRef) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(W, H, false)
     renderer.shadowMap.enabled = true
+    renderer.outputColorSpace = SRGBColorSpace
+    renderer.toneMapping = ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.0
 
     scene = new Scene()
     scene.background = new Color(0x0e1124)
@@ -475,16 +479,35 @@ export function useCityRenderer(canvasRef) {
           roughness: mtl?.roughness ?? 0.7,
           metalness: mtl?.metalness ?? 0.0,
         })
-        if (mtl?.textureAlbedo)             { mat.map          = texLoader.load(mtl.textureAlbedo) }
-        if (mtl?.textureNormal)             { mat.normalMap    = texLoader.load(mtl.textureNormal) }
+        if (mtl?.textureAlbedo) {
+          const isLinear = mtl.albedoColorSpace === 'linear'
+          const flipY    = mtl.flipY ?? false
+          const albedo   = texLoader.load(mtl.textureAlbedo)
+          albedo.flipY   = flipY
+          if (!isLinear) albedo.colorSpace = SRGBColorSpace
+          mat.map = albedo
+        }
+        if (mtl?.textureNormal) {
+          const normal = texLoader.load(mtl.textureNormal)
+          normal.flipY = mtl.flipY ?? false
+          mat.normalMap = normal
+        }
         if (mtl?.textureRoughnessMetalness) {
           const rm = texLoader.load(mtl.textureRoughnessMetalness)
+          rm.flipY = mtl.flipY ?? false
           mat.roughnessMap = rm
           mat.metalnessMap = rm
         }
-        if (mtl?.textureAo) { mat.aoMap = texLoader.load(mtl.textureAo) }
+        if (mtl?.textureAo) {
+          const ao = texLoader.load(mtl.textureAo)
+          ao.flipY = mtl.flipY ?? false
+          mat.aoMap = ao
+        }
         if (mtl?.textureEmissive) {
-          mat.emissiveMap = texLoader.load(mtl.textureEmissive)
+          const emissive = texLoader.load(mtl.textureEmissive)
+          emissive.colorSpace = SRGBColorSpace
+          emissive.flipY = mtl.flipY ?? false
+          mat.emissiveMap = emissive
           mat.emissive.set(0xffffff)
         }
         node.material = mat

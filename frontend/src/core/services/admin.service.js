@@ -54,6 +54,14 @@ export async function adminCreateMaterial(formData, queryParams) {
   return data
 }
 
+export async function adminUpdateMaterial(id, formData, queryParams) {
+  const { data } = await api.patch(`/admin/materials/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: queryParams,
+  })
+  return data
+}
+
 export async function adminListMaterials() {
   const { data } = await api.get('/admin/materials')
   return data

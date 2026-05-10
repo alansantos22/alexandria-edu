@@ -29,6 +29,12 @@ export class CityMaterial {
   @Column({ type: 'float', default: 0.0 })
   metalness: number;
 
+  @Column({ name: 'albedo_color_space', length: 10, default: 'srgb' })
+  albedoColorSpace: string;
+
+  @Column({ name: 'flip_y', type: 'tinyint', width: 1, default: 0 })
+  flipY: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 }

@@ -106,33 +106,64 @@ export class AdminService {
 
   // ─── Material 3D ───────────────────────────────────────────────────────────
 
+  private _texturesDir = path.resolve(process.cwd(), 'uploads', 'textures');
+
+  private _saveTexture(files: FileMap, fieldname: string): string | null {
+    const f = files[fieldname];
+    if (!f) return null;
+    fs.mkdirSync(this._texturesDir, { recursive: true });
+    const ext = f.filename.split('.').pop()?.toLowerCase() || 'png';
+    const fn  = `tex_${fieldname}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    fs.writeFileSync(path.join(this._texturesDir, fn), f.buffer);
+    return `/uploads/textures/${fn}`;
+  }
+
   async createMaterial(
     files: FileMap,
-    dto: { name: string; roughness?: number; metalness?: number },
+    dto: { name: string; roughness?: number; metalness?: number; albedoColorSpace?: string; flipY?: boolean },
   ): Promise<CityMaterial> {
-    const texturesDir = path.resolve(process.cwd(), 'uploads', 'textures');
-    fs.mkdirSync(texturesDir, { recursive: true });
-
-    const saveTexture = (fieldname: string): string | null => {
-      const f = files[fieldname];
-      if (!f) return null;
-      const ext = f.filename.split('.').pop()?.toLowerCase() || 'png';
-      const fn  = `tex_${fieldname}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-      fs.writeFileSync(path.join(texturesDir, fn), f.buffer);
-      return `/uploads/textures/${fn}`;
-    };
-
     const material = this.materialRepo.create({
-      id:                         randomUUID(),
-      name:                       dto.name,
-      textureAlbedo:              saveTexture('texAlbedo'),
-      textureNormal:              saveTexture('texNormal'),
-      textureRoughnessMetalness:  saveTexture('texRoughnessMetalness'),
-      textureAo:                  saveTexture('texAo'),
-      textureEmissive:            saveTexture('texEmissive'),
-      roughness:                  dto.roughness ?? 0.7,
-      metalness:                  dto.metalness ?? 0.0,
+      id:                        randomUUID(),
+      name:                      dto.name,
+      textureAlbedo:             this._saveTexture(files, 'texAlbedo'),
+      textureNormal:             this._saveTexture(files, 'texNormal'),
+      textureRoughnessMetalness: this._saveTexture(files, 'texRoughnessMetalness'),
+      textureAo:                 this._saveTexture(files, 'texAo'),
+      textureEmissive:           this._saveTexture(files, 'texEmissive'),
+      roughness:                 dto.roughness ?? 0.7,
+      metalness:                 dto.metalness ?? 0.0,
+      albedoColorSpace:          dto.albedoColorSpace ?? 'srgb',
+      flipY:                     dto.flipY ?? false,
     });
+    return this.materialRepo.save(material);
+  }
+
+  async updateMaterial(
+    id: string,
+    files: FileMap,
+    dto: { name?: string; roughness?: number; metalness?: number; albedoColorSpace?: string; flipY?: boolean },
+  ): Promise<CityMaterial> {
+    const material = await this.materialRepo.findOneBy({ id });
+    if (!material) throw new BadRequestException(`Material ${id} não encontrado.`);
+
+    if (dto.name             !== undefined) material.name             = dto.name;
+    if (dto.roughness        !== undefined) material.roughness        = dto.roughness;
+    if (dto.metalness        !== undefined) material.metalness        = dto.metalness;
+    if (dto.albedoColorSpace !== undefined) material.albedoColorSpace = dto.albedoColorSpace;
+    if (dto.flipY            !== undefined) material.flipY            = dto.flipY;
+
+    const newAlbedo  = this._saveTexture(files, 'texAlbedo');
+    const newNormal  = this._saveTexture(files, 'texNormal');
+    const newRm      = this._saveTexture(files, 'texRoughnessMetalness');
+    const newAo      = this._saveTexture(files, 'texAo');
+    const newEmissive = this._saveTexture(files, 'texEmissive');
+
+    if (newAlbedo)   material.textureAlbedo             = newAlbedo;
+    if (newNormal)   material.textureNormal              = newNormal;
+    if (newRm)       material.textureRoughnessMetalness  = newRm;
+    if (newAo)       material.textureAo                  = newAo;
+    if (newEmissive) material.textureEmissive             = newEmissive;
+
     return this.materialRepo.save(material);
   }
 

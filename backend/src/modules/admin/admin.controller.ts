@@ -88,9 +88,11 @@ export class AdminController {
   @Post('materials')
   async createMaterial(
     @Req() req: any,
-    @Query('name')      name: string,
-    @Query('roughness') roughness: string,
-    @Query('metalness') metalness: string,
+    @Query('name')             name: string,
+    @Query('roughness')        roughness: string,
+    @Query('metalness')        metalness: string,
+    @Query('albedoColorSpace') albedoColorSpace: string,
+    @Query('flipY')            flipY: string,
   ) {
     if (!name) throw new BadRequestException('Parâmetro obrigatório: name');
 
@@ -103,8 +105,36 @@ export class AdminController {
 
     return this.adminService.createMaterial(files, {
       name,
-      roughness: roughness ? Number(roughness) : undefined,
-      metalness: metalness ? Number(metalness) : undefined,
+      roughness:        roughness        ? Number(roughness)                      : undefined,
+      metalness:        metalness        ? Number(metalness)                      : undefined,
+      albedoColorSpace: albedoColorSpace ?? 'srgb',
+      flipY:            flipY === 'true' || flipY === '1',
+    });
+  }
+
+  @Patch('materials/:id')
+  async updateMaterial(
+    @Param('id')               id: string,
+    @Req()                     req: any,
+    @Query('name')             name: string,
+    @Query('roughness')        roughness: string,
+    @Query('metalness')        metalness: string,
+    @Query('albedoColorSpace') albedoColorSpace: string,
+    @Query('flipY')            flipY: string,
+  ) {
+    const files: Record<string, { filename: string; mimetype: string; buffer: Buffer }> = {};
+    for await (const part of req.files()) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of part.file) chunks.push(chunk);
+      files[part.fieldname] = { filename: part.filename, mimetype: part.mimetype, buffer: Buffer.concat(chunks) };
+    }
+
+    return this.adminService.updateMaterial(id, files, {
+      name,
+      roughness:        roughness        ? Number(roughness)   : undefined,
+      metalness:        metalness        ? Number(metalness)   : undefined,
+      albedoColorSpace: albedoColorSpace ?? undefined,
+      flipY:            flipY !== undefined ? (flipY === 'true' || flipY === '1') : undefined,
     });
   }
 
