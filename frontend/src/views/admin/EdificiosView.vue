@@ -16,6 +16,13 @@
         <Box :size="15" />
         Novo Edifício
       </button>
+      <button
+        :class="['p-edificios__subtab', { 'is-active': mode === 'veiculo' }]"
+        @click="mode = 'veiculo'"
+      >
+        <Car :size="15" />
+        Novo Veículo
+      </button>
     </nav>
 
     <!-- ── Conteúdo ──────────────────────────────────────────────────── -->
@@ -23,20 +30,26 @@
       <AdminCreateMaterial @created="onMaterialCreated" />
     </div>
 
-    <div v-else class="p-edificios__panel">
+    <div v-else-if="mode === 'edificio'" class="p-edificios__panel">
       <AdminCreateBuilding ref="buildingRef" />
+    </div>
+
+    <div v-else class="p-edificios__panel">
+      <AdminCreateVehicle ref="vehicleRef" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import { Palette, Box } from 'lucide-vue-next'
+import { Palette, Box, Car } from 'lucide-vue-next'
 import AdminCreateMaterial from '@/components/admin/AdminCreateMaterial.vue'
 import AdminCreateBuilding from '@/components/admin/AdminCreateBuilding.vue'
+import AdminCreateVehicle  from '@/components/admin/AdminCreateVehicle.vue'
 
-const mode = ref('material')
+const mode       = ref('material')
 const buildingRef = ref(null)
+const vehicleRef  = ref(null)
 
 function onMaterialCreated() {
   mode.value = 'edificio'

@@ -10,6 +10,8 @@ import { UserProfileCustomization }     from './entities/user-profile-customizat
 import { RedemptionToken }              from './entities/redemption-token.entity';
 import { CityPaletteItem }              from '../city/entities/city-palette-item.entity';
 import { UserBuildingUnlock }           from '../city/entities/user-building-unlock.entity';
+import { VehicleCatalog }              from '../city/entities/vehicle-catalog.entity';
+import { UserVehicle }                 from '../city/entities/user-vehicle.entity';
 
 import { MarketplaceRepository }  from './marketplace.repository';
 import { MarketplaceService }     from './marketplace.service';
@@ -26,6 +28,8 @@ import { AdminVaultController }   from './admin-vault.controller';
       RedemptionToken,
       CityPaletteItem,
       UserBuildingUnlock,
+      VehicleCatalog,
+      UserVehicle,
     ]),
     EconomyModule,
   ],

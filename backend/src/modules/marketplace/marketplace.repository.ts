@@ -10,6 +10,8 @@ import { RedemptionToken }            from './entities/redemption-token.entity';
 import type { ItemType }              from './entities/marketplace-item.entity';
 import { CityPaletteItem }            from '../city/entities/city-palette-item.entity';
 import { UserBuildingUnlock }         from '../city/entities/user-building-unlock.entity';
+import { VehicleCatalog }            from '../city/entities/vehicle-catalog.entity';
+import { UserVehicle }               from '../city/entities/user-vehicle.entity';
 
 @Injectable()
 export class MarketplaceRepository {
@@ -34,6 +36,12 @@ export class MarketplaceRepository {
 
     @InjectRepository(UserBuildingUnlock)
     private readonly buildingUnlockRepo: Repository<UserBuildingUnlock>,
+
+    @InjectRepository(VehicleCatalog)
+    private readonly vehicleCatalogRepo: Repository<VehicleCatalog>,
+
+    @InjectRepository(UserVehicle)
+    private readonly userVehicleRepo: Repository<UserVehicle>,
   ) {}
 
   // ─── Items ─────────────────────────────────────────────────────────────────
@@ -151,6 +159,44 @@ export class MarketplaceRepository {
   addBuildingUnlock(userId: string, paletteItemId: string): Promise<UserBuildingUnlock> {
     const record = this.buildingUnlockRepo.create({ userId, paletteItemId });
     return this.buildingUnlockRepo.save(record);
+  }
+
+  // ─── Vehicles ──────────────────────────────────────────────────────────────
+
+  findActiveVehicleCatalog(): Promise<VehicleCatalog[]> {
+    return this.vehicleCatalogRepo.find({
+      where: { isActive: true as any },
+      relations: ['vehicleAsset', 'vehicleAsset.material'],
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
+  findVehicleCatalogItem(id: string): Promise<VehicleCatalog | null> {
+    return this.vehicleCatalogRepo.findOne({
+      where: { id, isActive: true as any },
+      relations: ['vehicleAsset', 'vehicleAsset.material'],
+    });
+  }
+
+  findUserVehicles(userId: string): Promise<UserVehicle[]> {
+    return this.userVehicleRepo.find({
+      where: { userId },
+      relations: ['catalog', 'catalog.vehicleAsset', 'catalog.vehicleAsset.material'],
+    });
+  }
+
+  findUserVehicleByCarlogId(userId: string, catalogId: string): Promise<UserVehicle | null> {
+    return this.userVehicleRepo.findOne({ where: { userId, catalogId } });
+  }
+
+  async createUserVehicle(userId: string, catalogId: string): Promise<UserVehicle> {
+    const v = this.userVehicleRepo.create({ userId, vehicleType: `catalog:${catalogId}`, catalogId });
+    return this.userVehicleRepo.save(v);
+  }
+
+  async setActiveVehicle(userId: string, vehicleId: string): Promise<void> {
+    await this.userVehicleRepo.update({ userId }, { isActive: false });
+    await this.userVehicleRepo.update({ id: vehicleId, userId }, { isActive: true });
   }
 
   // ─── Vault ─────────────────────────────────────────────────────────────────

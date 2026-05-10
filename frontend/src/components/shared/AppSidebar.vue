@@ -42,6 +42,31 @@
       </router-link>
     </nav>
 
+    <!-- ── Inventário de Veículos ────────────── -->
+    <div v-if="!collapsed && ownedVehicles.length" class="c-sidebar__inventory">
+      <button class="c-sidebar__inventory-toggle" @click="inventoryOpen = !inventoryOpen">
+        <Car :size="15" />
+        <span>Inventário</span>
+        <ChevronDown :size="13" :class="{ 'is-open': inventoryOpen }" class="c-sidebar__inventory-chevron" />
+      </button>
+      <Transition name="slide-down">
+        <div v-if="inventoryOpen" class="c-sidebar__inventory-list">
+          <button
+            v-for="v in ownedVehicles"
+            :key="v.id"
+            class="c-sidebar__vehicle-item"
+            :class="{ 'is-active': v.isActive }"
+            :title="v.isActive ? 'Equipado' : 'Equipar'"
+            @click="equipVehicle(v)"
+          >
+            <span class="c-sidebar__vehicle-icon">{{ v.catalog?.icon || '🚗' }}</span>
+            <span class="c-sidebar__vehicle-name">{{ v.catalog?.name || 'Veículo' }}</span>
+            <span v-if="v.isActive" class="c-sidebar__vehicle-badge">✓</span>
+          </button>
+        </div>
+      </Transition>
+    </div>
+
     <!-- ── Footer ────────────────────────────── -->
     <div class="c-sidebar__foot">
       <!-- Coins balance -->
@@ -92,13 +117,14 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ChevronLeft, LogOut,
+  ChevronLeft, ChevronDown, LogOut, Car,
   House, MessageCircle, ShieldCheck, BookOpen, ShoppingBag, Building2, Map,
 } from 'lucide-vue-next'
 import { useEconomyStore } from '@/core/store/economy.js'
+import api from '@/core/api.js'
 
 const { balance, notification, fetchBalance } = useEconomyStore()
 
@@ -112,11 +138,29 @@ defineEmits(['toggle-collapse', 'close-mobile'])
 const route  = useRoute()
 const router = useRouter()
 
-const user = computed(() => JSON.parse(localStorage.getItem('user') || 'null'))
+const user           = computed(() => JSON.parse(localStorage.getItem('user') || 'null'))
+const inventoryOpen  = ref(false)
+const ownedVehicles  = ref([])
 
-onMounted(() => {
-  if (user.value) fetchBalance()
+onMounted(async () => {
+  if (user.value) {
+    fetchBalance()
+    try {
+      const { data } = await api.get('/city/vehicles')
+      ownedVehicles.value = data.vehicles ?? []
+    } catch { /* silencioso */ }
+  }
 })
+
+async function equipVehicle(vehicle) {
+  if (vehicle.isActive) return
+  try {
+    await api.post(`/city/vehicles/${vehicle.id}/activate`)
+    ownedVehicles.value = ownedVehicles.value.map(v => ({ ...v, isActive: v.id === vehicle.id }))
+  } catch (err) {
+    console.error('Erro ao equipar veículo:', err)
+  }
+}
 
 const userInitial = computed(() => {
   const name = user.value?.username || user.value?.email || '?'
@@ -303,6 +347,77 @@ $_transition:   width $dur-base $ease-out, transform $dur-base $ease-out;
     overflow: hidden;
     text-overflow: ellipsis;
     transition: opacity $dur-base $ease-out;
+  }
+
+  // ── Inventory ────────────────────────────────────────────────────
+  &__inventory {
+    padding: 0 $space-3 $space-2;
+  }
+
+  &__inventory-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    padding: $space-2;
+    background: none;
+    border: none;
+    border-radius: $radius-md;
+    color: rgba($neutral-100, 0.6);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: color $dur-fast $ease-out, background $dur-fast $ease-out;
+
+    &:hover { color: $neutral-100; background: rgba($neutral-600, 0.18); }
+
+    span { flex: 1; text-align: left; }
+  }
+
+  &__inventory-chevron {
+    transition: transform $dur-base $ease-out;
+    &.is-open { transform: rotate(180deg); }
+  }
+
+  &__inventory-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: $space-1 0;
+  }
+
+  &__vehicle-item {
+    display: flex;
+    align-items: center;
+    gap: $space-2;
+    padding: $space-2 $space-2;
+    background: none;
+    border: none;
+    border-radius: $radius-md;
+    color: rgba($neutral-100, 0.8);
+    font-size: 0.82rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background $dur-fast $ease-out, color $dur-fast $ease-out;
+    width: 100%;
+
+    &:hover { background: rgba($neutral-600, 0.25); color: $neutral-100; }
+
+    &.is-active {
+      background: rgba($brand-primary, 0.15);
+      color: $brand-primary-soft;
+    }
+  }
+
+  &__vehicle-icon { font-size: 1rem; flex-shrink: 0; }
+  &__vehicle-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__vehicle-badge {
+    font-size: 0.7rem;
+    color: $brand-primary-soft;
+    font-weight: 700;
+    flex-shrink: 0;
   }
 
   // ── Footer ──────────────────────────────────────────────────────
@@ -499,4 +614,9 @@ $_transition:   width $dur-base $ease-out, transform $dur-base $ease-out;
 .coin-toast-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
 .coin-toast-enter-from,
 .coin-toast-leave-to    { opacity: 0; transform: translateY(12px); }
+
+.slide-down-enter-active,
+.slide-down-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; overflow: hidden; }
+.slide-down-enter-from,
+.slide-down-leave-to    { opacity: 0; transform: translateY(-6px); }
 </style>

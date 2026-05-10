@@ -82,6 +82,11 @@ export class CityController {
     return this.cityService.purchaseVehicle(userId, dto);
   }
 
+  @Post('vehicles/catalog/:catalogId/buy')
+  purchaseVehicleFromCatalog(@CurrentUser('id') userId: string, @Param('catalogId') catalogId: string) {
+    return this.cityService.purchaseVehicleFromCatalog(userId, catalogId);
+  }
+
   @Patch('vehicles/:vehicleId/activate')
   activateVehicle(@CurrentUser('id') userId: string, @Param('vehicleId') vehicleId: string) {
     return this.cityService.activateVehicle(userId, vehicleId);

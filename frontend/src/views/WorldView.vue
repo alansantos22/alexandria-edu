@@ -63,7 +63,8 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useWorldRenderer } from '@/composables/useWorldRenderer.js'
-import { cityService } from '@/core/services/city.service.js'
+import { cityService }      from '@/core/services/city.service.js'
+import api                  from '@/core/api.js'
 
 const canvasRef = ref(null)
 const state     = ref('loading')
@@ -78,8 +79,23 @@ const {
 async function load() {
   state.value = 'loading'
   try {
-    cities = await cityService.getWorldMap()
-    loadWorld(cities)
+    const [citiesData, vehiclesData] = await Promise.allSettled([
+      cityService.getWorldMap(),
+      api.get('/city/vehicles'),
+    ])
+
+    cities = citiesData.status === 'fulfilled' ? citiesData.value : []
+
+    let activeVehicle  = null
+    let vehicleCatalog = []
+    if (vehiclesData.status === 'fulfilled') {
+      const vData = vehiclesData.value.data
+      const userVehicles = vData.vehicles ?? []
+      activeVehicle  = userVehicles.find(v => v.isActive) ?? null
+      vehicleCatalog = userVehicles.map(v => v.catalog).filter(Boolean)
+    }
+
+    loadWorld(cities, { activeVehicle, vehicleCatalog })
     state.value = 'ready'
 
     ;(function poll() {

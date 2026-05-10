@@ -46,6 +46,26 @@ export async function adminToggleBuilding(id, active) {
   return data
 }
 
+// ── Vehicles ──────────────────────────────────────────────────────────────
+
+export async function adminCreateVehicle(formData, queryParams) {
+  const { data } = await api.post('/admin/vehicles', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: queryParams,
+  })
+  return data
+}
+
+export async function adminListVehicles() {
+  const { data } = await api.get('/admin/vehicles')
+  return data
+}
+
+export async function adminToggleVehicle(id, active) {
+  const { data } = await api.patch(`/admin/vehicles/${id}/toggle`, { active })
+  return data
+}
+
 export async function adminCreateMaterial(formData, queryParams) {
   const { data } = await api.post('/admin/materials', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

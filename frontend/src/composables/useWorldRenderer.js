@@ -109,9 +109,12 @@ export function useWorldRenderer(canvasRef) {
     speed: 0,
     maxSpeed: 5.5, accel: 18, friction: 14, turnSpeed: 3.2,
   }
+  const WHEEL_RADIUS = 0.35 // raio estimado das rodas em unidades de mundo
+
   const vehicle = {
-    mesh:  null,
-    pos:   new Vector3(0, 0, 0),
+    mesh:        null,
+    wheelMeshes: [],          // nós GLB cujo nome contém 'wheel'
+    pos:         new Vector3(0, 0, 0),
     angle: 0,
     speed: 0,
     maxSpeed: 15, accel: 24, friction: 9, turnSpeed: 2.3,
@@ -361,13 +364,13 @@ export function useWorldRenderer(canvasRef) {
   }
 
   // ── World generation ───────────────────────────────────────────────────────────
-  function loadWorld(cities) {
+  function loadWorld(cities, { activeVehicle = null, vehicleCatalog = [] } = {}) {
     _generateTerrain()
     _generateRoads()
     _generateVegetation(cities)
     _generateCityPlots(cities)
-    _spawnAmbientCars()
-    _spawnVehicle()
+    _spawnAmbientCars(vehicleCatalog)
+    _spawnVehicle(activeVehicle)
     _spawnNpc()
   }
 
@@ -664,18 +667,150 @@ export function useWorldRenderer(canvasRef) {
   }
 
   // ── Player vehicle ─────────────────────────────────────────────────────────────
-  function _spawnVehicle() {
-    const geo = new BoxGeometry(1.4, 0.68, 2.8)
-    vehicle.mesh = new Mesh(geo, new MeshLambertMaterial({ color: 0x6c5ce7 }))
-    vehicle.mesh.castShadow = true
+  function _buildBoxVehicle(color = 0x6c5ce7) {
+    const geo  = new BoxGeometry(1.4, 0.68, 2.8)
+    const mesh = new Mesh(geo, new MeshLambertMaterial({ color }))
+    mesh.castShadow = true
     const hMat = new MeshLambertMaterial({ color: 0xfff4e0, emissive: 0xfff4e0, emissiveIntensity: 0.8 })
     ;[-0.44, 0.44].forEach(ox => {
       const h = new Mesh(new BoxGeometry(0.28, 0.14, 0.1), hMat)
       h.position.set(ox, 0.1, -1.45)
-      vehicle.mesh.add(h)
+      mesh.add(h)
     })
-    vehicle.mesh.position.copy(vehicle.pos)
-    scene.add(vehicle.mesh)
+    return mesh
+  }
+
+  function _applyGlbMaterial(root, matData) {
+    if (!matData) return
+    const texLoader = new TextureLoader()
+    root.traverse(node => {
+      if (!node.isMesh) return
+      const m = new MeshStandardMaterial({
+        roughness: matData.roughness ?? 0.7,
+        metalness: matData.metalness ?? 0.0,
+      })
+      if (matData.textureAlbedo) {
+        const t = texLoader.load(matData.textureAlbedo)
+        t.flipY = matData.flipY ?? false
+        if (matData.albedoColorSpace !== 'linear') t.colorSpace = SRGBColorSpace
+        m.map = t
+      }
+      if (matData.textureNormal) {
+        const t = texLoader.load(matData.textureNormal); t.flipY = matData.flipY ?? false; m.normalMap = t
+      }
+      if (matData.textureRoughnessMetalness) {
+        const t = texLoader.load(matData.textureRoughnessMetalness); t.flipY = matData.flipY ?? false
+        m.roughnessMap = m.metalnessMap = t
+      }
+      node.material = m
+    })
+  }
+
+  function _spawnVehicle(activeVehicle = null) {
+    if (activeVehicle?.catalog?.modelUrl) {
+      const loader = new GLTFLoader()
+      const url = activeVehicle.catalog.modelUrl.startsWith('http')
+        ? activeVehicle.catalog.modelUrl
+        : `${import.meta.env.VITE_API_URL || ''}${activeVehicle.catalog.modelUrl}`
+
+      loader.load(url, (gltf) => {
+        const root  = gltf.scene
+        const scale = activeVehicle.catalog.vehicleAsset?.scaleFactor ?? 1
+        root.scale.setScalar(scale)
+        root.castShadow = true
+        _applyGlbMaterial(root, activeVehicle.catalog.vehicleAsset?.material)
+        root.position.copy(vehicle.pos)
+
+        // Coletar rodas para animação
+        vehicle.wheelMeshes = []
+        root.traverse(node => {
+          if (node.isMesh && node.name.toLowerCase().includes('wheel')) {
+            vehicle.wheelMeshes.push(node)
+          }
+        })
+
+        scene.add(root)
+        vehicle.mesh = root
+      }, undefined, () => {
+        vehicle.mesh = _buildBoxVehicle(0x6c5ce7)
+        vehicle.mesh.position.copy(vehicle.pos)
+        scene.add(vehicle.mesh)
+      })
+    } else {
+      vehicle.mesh = _buildBoxVehicle(0x6c5ce7)
+      vehicle.mesh.position.copy(vehicle.pos)
+      scene.add(vehicle.mesh)
+    }
+  }
+
+  // ── Ambient cars ───────────────────────────────────────────────────────────────
+  function _spawnAmbientCars(vehicleCatalog = []) {
+    const palette = [0x8b9dc3, 0x4a9eff, 0x00d9c0, 0xff6b9d, 0xffd166, 0xc8bfe8]
+    const rng     = seededRng(0xf00dcafe)
+    const nearSegs = roadSegments.filter(s => Math.abs(s.coord) <= WORLD_SCALE)
+
+    const loader = new GLTFLoader()
+    const activeGlb = vehicleCatalog.filter(v => v.isActive && v.modelUrl)
+
+    nearSegs.forEach((seg, si) => {
+      for (let i = 0; i < 3; i++) {
+        const t    = rng()
+        const lane = i % 2 === 0 ? 1.1 : -1.1
+        const pos  = seg.from.clone().lerp(seg.to, t)
+        if (seg.axis === 'x') pos.z += lane
+        else                  pos.x += lane
+        pos.y = 0.42
+
+        const color = palette[(si * 3 + i) % palette.length]
+        const catalogItem = activeGlb.length ? activeGlb[(si * 3 + i) % activeGlb.length] : null
+
+        if (catalogItem) {
+          const url = catalogItem.modelUrl.startsWith('http')
+            ? catalogItem.modelUrl
+            : `${import.meta.env.VITE_API_URL || ''}${catalogItem.modelUrl}`
+
+          loader.load(url, (gltf) => {
+            const root = gltf.scene
+            const scale = catalogItem.vehicleAsset?.scaleFactor ?? 1
+            root.scale.setScalar(scale)
+            root.castShadow = true
+            if (seg.axis === 'x') root.rotation.y = Math.PI / 2
+            root.position.set(pos.x, 0, pos.z)
+
+            // Coletar rodas para animação
+            const wheelMeshes = []
+            root.traverse(node => {
+              if (node.isMesh && node.name.toLowerCase().includes('wheel')) {
+                wheelMeshes.push(node)
+              }
+            })
+
+            root.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane, wheelMeshes }
+            scene.add(root)
+            ambientCars.push(root)
+          }, undefined, () => {
+            // Fallback box car
+            const mat  = new MeshLambertMaterial({ color })
+            const mesh = new Mesh(new BoxGeometry(1.5, 0.65, 2.8), mat)
+            mesh.castShadow = true
+            if (seg.axis === 'x') mesh.rotation.y = Math.PI / 2
+            mesh.position.set(pos.x, 0.42, pos.z)
+            mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane }
+            scene.add(mesh)
+            ambientCars.push(mesh)
+          })
+        } else {
+          const mat  = new MeshLambertMaterial({ color })
+          const mesh = new Mesh(new BoxGeometry(1.5, 0.65, 2.8), mat)
+          mesh.castShadow = true
+          if (seg.axis === 'x') mesh.rotation.y = Math.PI / 2
+          mesh.position.set(pos.x, 0.42, pos.z)
+          mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane }
+          scene.add(mesh)
+          ambientCars.push(mesh)
+        }
+      }
+    })
   }
 
   // ── NPC ────────────────────────────────────────────────────────────────────────
@@ -685,7 +820,7 @@ export function useWorldRenderer(canvasRef) {
     body.position.set(0, 0.55, 0)
     body.castShadow = true
     const head = new Mesh(new BoxGeometry(0.4, 0.4, 0.4), new MeshLambertMaterial({ color: 0xf0d4b0 }))
-    head.position.set(0, 1.3, 0)
+    head.position.set(0, 1.55, 0)
     head.castShadow = true
     npc.group.add(body, head)
     npc.group.position.copy(npc.pos)
@@ -779,12 +914,19 @@ export function useWorldRenderer(canvasRef) {
     vehicle.pos.z += Math.cos(vehicle.angle) * vehicle.speed * dt
     vehicle.pos.y  = 0.42
     if (vehicle.mesh) { vehicle.mesh.position.copy(vehicle.pos); vehicle.mesh.rotation.y = vehicle.angle }
+
+    // Girar rodas proporcionalmente à velocidade
+    if (vehicle.wheelMeshes.length) {
+      const rot = (vehicle.speed * dt) / WHEEL_RADIUS
+      vehicle.wheelMeshes.forEach(w => { w.rotation.x -= rot })
+    }
+
     playerPos.value = { x: Math.round(vehicle.pos.x), z: Math.round(vehicle.pos.z) }
   }
 
   function _updateAmbientCars(dt) {
     ambientCars.forEach(car => {
-      const { seg, speed, dir, lane } = car.userData
+      const { seg, speed, dir, lane, wheelMeshes } = car.userData
       car.userData.t += (speed * dt / seg.length) * dir
       if (car.userData.t > 1) car.userData.t = 0
       if (car.userData.t < 0) car.userData.t = 1
@@ -792,6 +934,12 @@ export function useWorldRenderer(canvasRef) {
       if (seg.axis === 'x') p.z += lane
       else                  p.x += lane
       car.position.set(p.x, 0.42, p.z)
+
+      // Girar rodas dos carros ambiente
+      if (wheelMeshes?.length) {
+        const rot = (speed * dir * dt) / WHEEL_RADIUS
+        wheelMeshes.forEach(w => { w.rotation.x -= rot })
+      }
     })
   }
 

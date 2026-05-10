@@ -8,6 +8,7 @@ import { UserVehicle } from './entities/user-vehicle.entity';
 import { CityPaletteItem } from './entities/city-palette-item.entity';
 import { CityBuilding } from './entities/city-building.entity';
 import { UserBuildingUnlock } from './entities/user-building-unlock.entity';
+import { VehicleCatalog }    from './entities/vehicle-catalog.entity';
 
 @Injectable()
 export class CityRepository {
@@ -24,6 +25,8 @@ export class CityRepository {
     private readonly buildingRepo: Repository<CityBuilding>,
     @InjectRepository(UserBuildingUnlock)
     private readonly buildingUnlockRepo: Repository<UserBuildingUnlock>,
+    @InjectRepository(VehicleCatalog)
+    private readonly vehicleCatalogRepo: Repository<VehicleCatalog>,
   ) {}
 
   // ── City Meta ──────────────────────────────────────────────
@@ -103,15 +106,24 @@ export class CityRepository {
   // ── Vehicles ──────────────────────────────────────────────
 
   async findVehicles(userId: string): Promise<UserVehicle[]> {
-    return this.vehicleRepo.find({ where: { userId } });
+    return this.vehicleRepo.find({ where: { userId }, relations: ['catalog', 'catalog.vehicleAsset', 'catalog.vehicleAsset.material'] });
   }
 
   async findVehicle(userId: string, vehicleType: string): Promise<UserVehicle | null> {
     return this.vehicleRepo.findOne({ where: { userId, vehicleType } });
   }
 
+  async findVehicleByCatalogId(userId: string, catalogId: string): Promise<UserVehicle | null> {
+    return this.vehicleRepo.findOne({ where: { userId, catalogId } });
+  }
+
   async createVehicle(userId: string, vehicleType: string): Promise<UserVehicle> {
-    const vehicle = this.vehicleRepo.create({ userId, vehicleType });
+    const vehicle = this.vehicleRepo.create({ userId, vehicleType, catalogId: null });
+    return this.vehicleRepo.save(vehicle);
+  }
+
+  async createVehicleFromCatalog(userId: string, catalogId: string): Promise<UserVehicle> {
+    const vehicle = this.vehicleRepo.create({ userId, vehicleType: `catalog:${catalogId}`, catalogId });
     return this.vehicleRepo.save(vehicle);
   }
 
@@ -123,9 +135,26 @@ export class CityRepository {
   async ensureSkateboard(userId: string): Promise<void> {
     const exists = await this.findVehicle(userId, 'skateboard');
     if (!exists) {
-      const vehicle = this.vehicleRepo.create({ userId, vehicleType: 'skateboard', isActive: true });
+      const vehicle = this.vehicleRepo.create({ userId, vehicleType: 'skateboard', catalogId: null, isActive: true });
       await this.vehicleRepo.save(vehicle);
     }
+  }
+
+  // ── Vehicle Catalog (DB-driven) ─────────────────────────────
+
+  findVehicleCatalog(): Promise<VehicleCatalog[]> {
+    return this.vehicleCatalogRepo.find({
+      where: { isActive: true as any },
+      relations: ['vehicleAsset', 'vehicleAsset.material'],
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+  }
+
+  findVehicleCatalogItem(id: string): Promise<VehicleCatalog | null> {
+    return this.vehicleCatalogRepo.findOne({
+      where: { id },
+      relations: ['vehicleAsset', 'vehicleAsset.material'],
+    });
   }
 
   // ── Palette ───────────────────────────────────────────────

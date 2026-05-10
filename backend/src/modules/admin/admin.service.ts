@@ -13,9 +13,12 @@ import { MarketplaceItem }     from '../marketplace/entities/marketplace-item.en
 import { CityPaletteItem }     from '../city/entities/city-palette-item.entity';
 import { BuildingAsset }       from '../city/entities/building-asset.entity';
 import { CityMaterial }        from '../city/entities/city-material.entity';
+import { VehicleCatalog }      from '../city/entities/vehicle-catalog.entity';
+import { VehicleAsset }        from '../city/entities/vehicle-asset.entity';
 import { CreateBackgroundDto } from './dto/create-background.dto';
 import { CreatePaletteDto }    from './dto/create-palette.dto';
 import { CreateBuildingDto }   from './dto/create-building.dto';
+import { CreateVehicleDto }    from './dto/create-vehicle.dto';
 
 type FileMap = Record<string, { filename: string; mimetype: string; buffer: Buffer }>;
 
@@ -34,6 +37,10 @@ export class AdminService {
     private readonly buildingAssetRepo: Repository<BuildingAsset>,
     @InjectRepository(CityMaterial)
     private readonly materialRepo: Repository<CityMaterial>,
+    @InjectRepository(VehicleCatalog)
+    private readonly vehicleCatalogRepo: Repository<VehicleCatalog>,
+    @InjectRepository(VehicleAsset)
+    private readonly vehicleAssetRepo: Repository<VehicleAsset>,
   ) {}
 
   // ─── Background upload ──────────────────────────────────────────────────────
@@ -219,6 +226,57 @@ export class AdminService {
       relations: ['buildingAsset', 'buildingAsset.material'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  // ─── Vehicle 3D ────────────────────────────────────────────────────────────
+
+  async createVehicle(
+    files: FileMap,
+    dto: CreateVehicleDto,
+  ): Promise<VehicleCatalog> {
+    const modelFile = files['model'];
+    if (!modelFile) throw new BadRequestException('Arquivo model (GLB) é obrigatório.');
+
+    const modelsDir = path.resolve(process.cwd(), 'uploads', 'models');
+    fs.mkdirSync(modelsDir, { recursive: true });
+
+    const modelFilename = `vehicle_${Date.now()}_${Math.random().toString(36).slice(2)}.glb`;
+    fs.writeFileSync(path.join(modelsDir, modelFilename), modelFile.buffer);
+    this.logger.log(`Modelo GLB de veículo salvo: ${modelFilename}`);
+
+    const id = randomUUID();
+
+    const vehicle = this.vehicleCatalogRepo.create({
+      id,
+      name:       dto.name,
+      icon:       dto.icon || '🚗',
+      priceCoins: dto.priceCoins,
+      speed:      dto.speed ?? 5.0,
+      modelUrl:   `/uploads/models/${modelFilename}`,
+      isActive:   true,
+    });
+    await this.vehicleCatalogRepo.save(vehicle);
+
+    const asset = this.vehicleAssetRepo.create({
+      vehicleId:   id,
+      materialId:  dto.materialId ?? null,
+      scaleFactor: dto.scaleFactor ?? 1.0,
+    });
+    await this.vehicleAssetRepo.save(asset);
+
+    return this.vehicleCatalogRepo.findOne({ where: { id }, relations: ['vehicleAsset', 'vehicleAsset.material'] });
+  }
+
+  listVehicles(): Promise<VehicleCatalog[]> {
+    return this.vehicleCatalogRepo.find({
+      relations: ['vehicleAsset', 'vehicleAsset.material'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async toggleVehicle(id: string, active: boolean): Promise<VehicleCatalog> {
+    await this.vehicleCatalogRepo.update(id, { isActive: active as any });
+    return this.vehicleCatalogRepo.findOneOrFail({ where: { id }, relations: ['vehicleAsset', 'vehicleAsset.material'] });
   }
 
   // ─── Marketplace list / toggle ──────────────────────────────────────────────

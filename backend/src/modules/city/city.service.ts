@@ -149,40 +149,86 @@ export class CityService {
   }
 
   async purchaseVehicle(userId: string, dto: PurchaseVehicleDto): Promise<UserVehicle> {
-    const catalogEntry = VEHICLE_CATALOG[dto.vehicleType];
+    // Legacy hardcoded vehicles
+    const catalogEntry = VEHICLE_CATALOG[dto.vehicleType as keyof typeof VEHICLE_CATALOG];
 
-    const existing = await this.cityRepository.findVehicle(userId, dto.vehicleType);
-    if (existing) throw new ConflictException('Você já possui este veículo.');
+    if (catalogEntry) {
+      const existing = await this.cityRepository.findVehicle(userId, dto.vehicleType);
+      if (existing) throw new ConflictException('Você já possui este veículo.');
 
-    if (catalogEntry.cost > 0) {
-      const result = await this.economyService.spendCoins(
-        userId,
-        catalogEntry.cost,
-        dto.vehicleType,
-        `Compra de veículo: ${catalogEntry.label}`,
-      );
-
-      if (!result.success) {
-        throw new BadRequestException(
-          `Saldo insuficiente. Necessário: ${catalogEntry.cost} moedas. Disponível: ${result.balance}.`,
+      if (catalogEntry.cost > 0) {
+        const result = await this.economyService.spendCoins(
+          userId,
+          catalogEntry.cost,
+          dto.vehicleType,
+          `Compra de veículo: ${catalogEntry.label}`,
         );
+        if (!result.success) {
+          throw new BadRequestException(
+            `Saldo insuficiente. Necessário: ${catalogEntry.cost} moedas. Disponível: ${result.balance}.`,
+          );
+        }
       }
+
+      return this.cityRepository.createVehicle(userId, dto.vehicleType);
     }
 
-    return this.cityRepository.createVehicle(userId, dto.vehicleType);
+    throw new NotFoundException('Tipo de veículo não encontrado.');
+  }
+
+  /** Compra veículo pelo ID do catálogo DB */
+  async purchaseVehicleFromCatalog(userId: string, catalogId: string): Promise<{ vehicle: UserVehicle; newBalance: number }> {
+    const item = await this.cityRepository.findVehicleCatalogItem(catalogId);
+    if (!item) throw new NotFoundException('Veículo não encontrado no catálogo.');
+
+    const existing = await this.cityRepository.findVehicleByCatalogId(userId, catalogId);
+    if (existing) throw new ConflictException('Você já possui este veículo.');
+
+    let newBalance = 0;
+    if (item.priceCoins > 0) {
+      const result = await this.economyService.spendCoins(
+        userId,
+        item.priceCoins,
+        catalogId,
+        `Compra de veículo: ${item.name}`,
+      );
+      if (!result.success) {
+        throw new BadRequestException(
+          `Saldo insuficiente. Necessário: ${item.priceCoins} moedas. Disponível: ${result.balance}.`,
+        );
+      }
+      newBalance = result.balance;
+    } else {
+      const { balance } = await this.economyService.getBalance(userId);
+      newBalance = balance;
+    }
+
+    const vehicle = await this.cityRepository.createVehicleFromCatalog(userId, catalogId);
+
+    // Auto-equip: se não há outro veículo ativo, ativa este
+    const allVehicles = await this.cityRepository.findVehicles(userId);
+    const hasActive   = allVehicles.some(v => v.isActive && v.id !== vehicle.id);
+    if (!hasActive) {
+      await this.cityRepository.setActiveVehicle(userId, vehicle.id);
+    }
+
+    const updated = await this.cityRepository.findVehicles(userId);
+    const fresh   = updated.find(v => v.id === vehicle.id)!;
+    return { vehicle: fresh, newBalance };
   }
 
   async activateVehicle(userId: string, vehicleId: string): Promise<void> {
     const vehicles = await this.cityRepository.findVehicles(userId);
     const target = vehicles.find((v) => v.id === vehicleId);
-
     if (!target) throw new NotFoundException('Veículo não encontrado.');
-
     await this.cityRepository.setActiveVehicle(userId, vehicleId);
   }
 
-  getVehicleCatalog() {
-    return Object.entries(VEHICLE_CATALOG).map(([type, data]) => ({ type, ...data }));
+  /** Retorna catálogo DB + hardcoded para exibição no mapa */
+  async getVehicleCatalog() {
+    const dbCatalog  = await this.cityRepository.findVehicleCatalog();
+    const hardcoded  = Object.entries(VEHICLE_CATALOG).map(([type, data]) => ({ type, ...data }));
+    return { hardcoded, catalog: dbCatalog };
   }
 
   getWorldMap(): Promise<WorldCityInfo[]> {

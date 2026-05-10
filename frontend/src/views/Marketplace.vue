@@ -10,7 +10,7 @@
           Marketplace
         </h1>
         <p class="p-marketplace__lead">
-          Personalize seu perfil e desbloqueie edifícios para sua cidade.
+          Personalize seu perfil, desbloqueie edifícios e adquira veículos para sua cidade.
         </p>
       </div>
 
@@ -104,6 +104,7 @@ const { balance, applyReward, fetchBalance } = useEconomyStore()
 
 const items        = ref([])
 const buildings    = ref([])
+const vehicles     = ref([])
 const activeSeason = ref(null)
 const loading      = ref(true)
 const purchasing   = ref(false)
@@ -122,12 +123,14 @@ const filters = [
   { value: 'wallpaper', label: 'Wallpapers', icon: '🖼️' },
   { value: 'palette',   label: 'Paletas',    icon: '🎨' },
   { value: 'building',  label: 'Edifícios',  icon: '🏗️' },
+  { value: 'vehicle',   label: 'Veículos',   icon: '🚗' },
 ]
 
 const allItems = computed(() => {
   const cosmetics = items.value
   const blds      = buildings.value
-  return [...cosmetics, ...blds]
+  const vehs      = vehicles.value
+  return [...cosmetics, ...blds, ...vehs]
 })
 
 const filteredItems = computed(() => {
@@ -151,13 +154,15 @@ const timeRemaining = computed(() => {
 async function loadItems() {
   loading.value = true
   try {
-    const [cosmeticsData, buildingsData] = await Promise.all([
+    const [cosmeticsData, buildingsData, vehiclesData] = await Promise.all([
       marketplaceService.listItems(),
       marketplaceService.listBuildings(),
+      marketplaceService.listVehicles(),
     ])
     items.value        = cosmeticsData.items
     activeSeason.value = cosmeticsData.activeSeason
     buildings.value    = buildingsData.buildings
+    vehicles.value     = vehiclesData.vehicles
   } catch {
     // silencioso; o interceptor de axios já redireciona no 401
   } finally {
@@ -186,6 +191,12 @@ async function confirmPurchase() {
       fetchBalance()
       const idx = buildings.value.findIndex(b => b.id === item.id)
       if (idx !== -1) buildings.value[idx] = { ...buildings.value[idx], owned: true }
+    } else if (item.type === 'vehicle') {
+      result = await marketplaceService.buyVehicle(item.id)
+      if (item.priceCoins > 0) { applyReward(-item.priceCoins, result.newBalance); fetchBalance() }
+      const idx = vehicles.value.findIndex(v => v.id === item.id)
+      if (idx !== -1) vehicles.value[idx] = { ...vehicles.value[idx], owned: true }
+      showEquipToast(`${item.name} adquirido e equipado! 🚗`)
     } else {
       result = await marketplaceService.buyItem(item.id)
       applyReward(-item.priceCoins, result.newBalance)

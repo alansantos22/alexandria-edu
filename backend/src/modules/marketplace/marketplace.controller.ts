@@ -77,4 +77,21 @@ export class MarketplaceController {
   ) {
     return this.marketplaceService.purchaseBuilding(user.id, paletteItemId);
   }
+
+  // ── Vehicles ─────────────────────────────────────────────
+
+  /** Lista veículos do catálogo DB com info de posse/preço */
+  @Get('vehicles')
+  listVehicles(@CurrentUser() user: AuthenticatedUser) {
+    return this.marketplaceService.listVehicles(user.id);
+  }
+
+  /** Compra um veículo do catálogo DB (equipa automaticamente se for o único) */
+  @Post('vehicles/:id/buy')
+  purchaseVehicle(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') catalogId: string,
+  ) {
+    return this.marketplaceService.purchaseVehicle(user.id, catalogId);
+  }
 }

@@ -13,6 +13,8 @@ import { UserProfileCustomization } from './entities/user-profile-customization.
 import { RedemptionToken }       from './entities/redemption-token.entity';
 import type { ItemType }         from './entities/marketplace-item.entity';
 import { CityPaletteItem }       from '../city/entities/city-palette-item.entity';
+import { VehicleCatalog }        from '../city/entities/vehicle-catalog.entity';
+import { UserVehicle }           from '../city/entities/user-vehicle.entity';
 
 export interface ItemWithOwnership extends MarketplaceItem {
   owned: boolean;
@@ -22,6 +24,18 @@ export interface ItemWithOwnership extends MarketplaceItem {
 export interface MarketplaceListResult {
   items: ItemWithOwnership[];
   activeSeason: MarketplaceSeason | null;
+  userBalance: number;
+}
+
+export interface VehicleWithOwnership extends VehicleCatalog {
+  type: 'vehicle';
+  owned: boolean;
+  canAfford: boolean;
+  rarity: 'common';
+}
+
+export interface VehiclesListResult {
+  vehicles: VehicleWithOwnership[];
   userBalance: number;
 }
 
@@ -277,5 +291,65 @@ export class MarketplaceService {
     await this.marketplaceRepo.addBuildingUnlock(userId, paletteItemId);
     this.logger.log(`User ${userId} purchased building ${paletteItemId} for ${building.priceCoins} coins`);
     return { success: true, building, newBalance };
+  }
+
+  // ── Vehicles ─────────────────────────────────────────────────────────────
+
+  async listVehicles(userId: string): Promise<VehiclesListResult> {
+    const [catalog, userVehicles, { balance }] = await Promise.all([
+      this.marketplaceRepo.findActiveVehicleCatalog(),
+      this.marketplaceRepo.findUserVehicles(userId),
+      this.economyService.getBalance(userId),
+    ]);
+
+    const ownedSet = new Set(userVehicles.map(v => v.catalogId).filter(Boolean));
+
+    const vehicles: VehicleWithOwnership[] = catalog.map(v => ({
+      ...v,
+      type:      'vehicle' as const,
+      rarity:    'common'  as const,
+      owned:     ownedSet.has(v.id),
+      canAfford: balance >= v.priceCoins,
+    }));
+
+    return { vehicles, userBalance: balance };
+  }
+
+  async purchaseVehicle(
+    userId: string,
+    catalogId: string,
+  ): Promise<{ success: boolean; vehicle: UserVehicle; newBalance: number }> {
+    const vehicle = await this.marketplaceRepo.findVehicleCatalogItem(catalogId);
+    if (!vehicle) throw new NotFoundException('Veículo não encontrado.');
+
+    const existing = await this.marketplaceRepo.findUserVehicleByCarlogId(userId, catalogId);
+    if (existing) throw new BadRequestException('Você já possui este veículo.');
+
+    let newBalance = 0;
+    if (vehicle.priceCoins > 0) {
+      const { success, balance } = await this.economyService.spendCoins(
+        userId,
+        vehicle.priceCoins,
+        catalogId,
+        `Compra de veículo: ${vehicle.name}`,
+      );
+      if (!success) throw new BadRequestException('Saldo de moedas insuficiente.');
+      newBalance = balance;
+    } else {
+      const { balance } = await this.economyService.getBalance(userId);
+      newBalance = balance;
+    }
+
+    const userVehicle = await this.marketplaceRepo.createUserVehicle(userId, catalogId);
+
+    // Auto-equip se não há ativo
+    const allVehicles = await this.marketplaceRepo.findUserVehicles(userId);
+    const hasActive   = allVehicles.some(v => v.isActive && v.id !== userVehicle.id);
+    if (!hasActive) {
+      await this.marketplaceRepo.setActiveVehicle(userId, userVehicle.id);
+    }
+
+    this.logger.log(`User ${userId} purchased vehicle ${catalogId} for ${vehicle.priceCoins} coins`);
+    return { success: true, vehicle: userVehicle, newBalance };
   }
 }

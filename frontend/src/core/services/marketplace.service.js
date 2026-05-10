@@ -39,4 +39,16 @@ export const marketplaceService = {
   buyBuilding(paletteItemId) {
     return api.post(`/marketplace/buildings/${paletteItemId}/buy`).then(r => r.data)
   },
+
+  // ── Veículos ─────────────────────────────────────────────────────────────
+
+  /** Lista veículos do catálogo DB com campo `owned` e `canAfford` */
+  listVehicles() {
+    return api.get('/marketplace/vehicles').then(r => r.data)
+  },
+
+  /** Compra um veículo pelo catalogId (equipa automaticamente se for o primeiro) */
+  buyVehicle(catalogId) {
+    return api.post(`/marketplace/vehicles/${catalogId}/buy`).then(r => r.data)
+  },
 }

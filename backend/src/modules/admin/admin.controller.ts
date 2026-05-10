@@ -195,4 +195,45 @@ export class AdminController {
   toggleBuilding(@Param('id') id: string, @Body('active') active: boolean) {
     return this.adminService.toggleBuilding(id, active);
   }
+
+  // ── Vehicles ──────────────────────────────────────────────────────────────
+
+  @Get('vehicles')
+  listVehicles() {
+    return this.adminService.listVehicles();
+  }
+
+  @Post('vehicles')
+  async createVehicle(
+    @Req() req: any,
+    @Query('name')        name: string,
+    @Query('priceCoins')  priceCoins: string,
+    @Query('speed')       speed: string,
+    @Query('icon')        icon: string,
+    @Query('materialId')  materialId: string,
+    @Query('scaleFactor') scaleFactor: string,
+  ) {
+    if (!name) throw new BadRequestException('Parâmetro obrigatório: name');
+
+    const files: Record<string, { filename: string; mimetype: string; buffer: Buffer }> = {};
+    for await (const part of req.files()) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of part.file) chunks.push(chunk);
+      files[part.fieldname] = { filename: part.filename, mimetype: part.mimetype, buffer: Buffer.concat(chunks) };
+    }
+
+    return this.adminService.createVehicle(files, {
+      name,
+      priceCoins:  Number(priceCoins) || 0,
+      speed:       speed       ? Number(speed)       : undefined,
+      icon:        icon        || undefined,
+      materialId:  materialId  || undefined,
+      scaleFactor: scaleFactor ? Number(scaleFactor) : undefined,
+    });
+  }
+
+  @Patch('vehicles/:id/toggle')
+  toggleVehicle(@Param('id') id: string, @Body('active') active: boolean) {
+    return this.adminService.toggleVehicle(id, active);
+  }
 }
