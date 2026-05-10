@@ -23,6 +23,7 @@ export function useBuildMode(renderer) {
   const ccuUsed        = ref(0)
   const ccuLimit       = ref(2000)
   const ghostValid     = ref(false)
+  const deleteMode     = ref(false)
 
   // Occupied cells: Set<"gridX,gridZ">
   const occupied = new Set()
@@ -74,16 +75,20 @@ export function useBuildMode(renderer) {
   async function activate(cityMeta) {
     loading.value = true
     try {
-      const [paletteData, buildingsData] = await Promise.all([
-        cityService.getPalette(),
+      const userId = cityMeta?.userId
+      const [paletteData, buildingsData, ownedLand] = await Promise.all([
+        cityService.getMyPalette(),
         cityService.getBuildings(),
+        userId ? cityService.getLandOwned(userId) : Promise.resolve([]),
       ])
-      palette.value   = paletteData
+      // Only show buildings that have a 3D model (buildingAsset) associated
+      palette.value   = paletteData.filter(item => item.buildingAsset != null)
       buildings.value = buildingsData
       ccuUsed.value   = cityMeta?.ccuUsed   ?? 0
       ccuLimit.value  = cityMeta?.ccuLimit  ?? 2000
       _buildOccupancy()
 
+      renderer.setOwnedTiles(ownedLand)
       renderer.enterBuildMode(buildingsData)
       renderer.setBuildCallbacks(_onHover, _onClick)
 
@@ -97,7 +102,17 @@ export function useBuildMode(renderer) {
     renderer.exitBuildMode()
     selectedItem.value = null
     ghostValid.value   = false
+    deleteMode.value   = false
     isActive.value     = false
+  }
+
+  // ── Delete mode ────────────────────────────────────────────
+
+  function toggleDeleteMode() {
+    deleteMode.value = !deleteMode.value
+    if (deleteMode.value) {
+      clearSelection()  // exit placement mode when entering delete mode
+    }
   }
 
   // ── Item selection ───────────────────────────────────────────────
@@ -116,7 +131,11 @@ export function useBuildMode(renderer) {
   // ── Hover (ghost movement) ────────────────────────────────────────
 
   function _onHover(clientX, clientY) {
-    if (!selectedItem.value) return
+    // In delete mode: suppress ghost, let user hover to identify buildings
+    if (deleteMode.value) {
+      renderer.clearGhost()
+      return
+    }
     const cell = renderer.raycastToGrid(clientX, clientY)
     if (!cell) {
       renderer.clearGhost()
@@ -133,9 +152,17 @@ export function useBuildMode(renderer) {
     renderer.moveGhost(gridX, gridZ, valid)
   }
 
-  // ── Click (place building) ────────────────────────────────────────
-
   async function _onClick(e) {
+    // ── Delete mode ───────────────────────────────────────────
+    if (deleteMode.value) {
+      const buildingId = renderer.pickPlacedBuilding(e.clientX, e.clientY)
+      if (!buildingId) return
+      const building = buildings.value.find(b => b.id === buildingId)
+      if (building) await removeBuilding(building)
+      return
+    }
+
+    // ── Placement mode ───────────────────────────────────────
     if (!selectedItem.value) return
     const cell = renderer.raycastToGrid(e.clientX, e.clientY)
     if (!cell) return
@@ -149,6 +176,12 @@ export function useBuildMode(renderer) {
       (ccuUsed.value + ccuCost) <= ccuLimit.value
     )
     if (!valid) return
+
+    // Quantity guard: paid buildings = 1 purchase → 1 placement
+    if (item.priceCoins > 0) {
+      const alreadyPlaced = buildings.value.filter(b => b.paletteItemId === item.id).length
+      if (alreadyPlaced >= 1) return
+    }
 
     // Optimistic update
     const tempId = `tmp-${Date.now()}`
@@ -176,6 +209,13 @@ export function useBuildMode(renderer) {
       const idx = buildings.value.findIndex(b => b.id === tempId)
       if (idx !== -1) buildings.value[idx] = placed
       renderer.replacePlacedBuilding(tempId, placed.id)
+
+      // Paid buildings: remove from palette after placement (1 unlock = 1 instance)
+      if (item.priceCoins > 0) {
+        palette.value = palette.value.filter(p => p.id !== item.id)
+        clearSelection()
+        return
+      }
     } catch {
       // Rollback
       buildings.value = buildings.value.filter(b => b.id !== tempId)
@@ -184,7 +224,7 @@ export function useBuildMode(renderer) {
       renderer.removePlacedBuilding(tempId)
     }
 
-    // Re-arm ghost so player can continue placing same item
+    // Re-arm ghost for free buildings so player can keep placing
     renderer.setGhostItem(item)
   }
 
@@ -217,5 +257,6 @@ export function useBuildMode(renderer) {
     activate, deactivate,
     selectItem, clearSelection,
     removeBuilding,
+    deleteMode, toggleDeleteMode,
   }
 }

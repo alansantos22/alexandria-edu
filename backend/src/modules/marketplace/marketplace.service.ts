@@ -12,6 +12,7 @@ import { UserInventory }         from './entities/user-inventory.entity';
 import { UserProfileCustomization } from './entities/user-profile-customization.entity';
 import { RedemptionToken }       from './entities/redemption-token.entity';
 import type { ItemType }         from './entities/marketplace-item.entity';
+import { CityPaletteItem }       from '../city/entities/city-palette-item.entity';
 
 export interface ItemWithOwnership extends MarketplaceItem {
   owned: boolean;
@@ -21,6 +22,18 @@ export interface ItemWithOwnership extends MarketplaceItem {
 export interface MarketplaceListResult {
   items: ItemWithOwnership[];
   activeSeason: MarketplaceSeason | null;
+  userBalance: number;
+}
+
+export interface BuildingWithOwnership extends CityPaletteItem {
+  type: 'building';
+  owned: boolean;
+  canAfford: boolean;
+  rarity: 'common';
+}
+
+export interface BuildingsListResult {
+  buildings: BuildingWithOwnership[];
   userBalance: number;
 }
 
@@ -207,5 +220,61 @@ export class MarketplaceService {
 
     this.logger.log(`User ${userId} redeemed token ${token.code} → item ${token.itemId}`);
     return { item: token.item, message: 'Item resgatado com sucesso!' };
+  }
+
+  // ── Buildings ─────────────────────────────────────────────────────────────
+
+  async listBuildings(userId: string): Promise<BuildingsListResult> {
+    const [buildings, unlocks, { balance }] = await Promise.all([
+      this.marketplaceRepo.findActivePaletteItems(),
+      this.marketplaceRepo.findUserBuildingUnlocks(userId),
+      this.economyService.getBalance(userId),
+    ]);
+
+    const unlockedSet = new Set(unlocks.map(u => u.paletteItemId));
+
+    const enriched: BuildingWithOwnership[] = buildings.map(b => ({
+      ...b,
+      type:      'building' as const,
+      rarity:    'common' as const,
+      owned:     b.priceCoins === 0 || unlockedSet.has(b.id),
+      canAfford: balance >= b.priceCoins,
+    }));
+
+    return { buildings: enriched, userBalance: balance };
+  }
+
+  async purchaseBuilding(
+    userId: string,
+    paletteItemId: string,
+  ): Promise<{ success: boolean; building: CityPaletteItem; newBalance: number }> {
+    const building = await this.marketplaceRepo.findPaletteItemById(paletteItemId);
+    if (!building) throw new NotFoundException('Edifício não encontrado.');
+
+    if (building.priceCoins === 0) {
+      throw new BadRequestException('Este edifício é gratuito e não precisa ser comprado.');
+    }
+
+    const alreadyOwns = await this.marketplaceRepo.userOwnsBuilding(userId, paletteItemId);
+    if (alreadyOwns) throw new BadRequestException('Você já possui este edifício.');
+
+    const { balance } = await this.economyService.getBalance(userId);
+    if (balance < building.priceCoins) {
+      throw new BadRequestException(
+        `Saldo insuficiente. Necessário: ${building.priceCoins}. Disponível: ${balance}.`,
+      );
+    }
+
+    const { success, balance: newBalance } = await this.economyService.spendCoins(
+      userId,
+      building.priceCoins,
+      paletteItemId,
+      `Compra de edifício: ${building.name}`,
+    );
+    if (!success) throw new BadRequestException('Saldo de moedas insuficiente.');
+
+    await this.marketplaceRepo.addBuildingUnlock(userId, paletteItemId);
+    this.logger.log(`User ${userId} purchased building ${paletteItemId} for ${building.priceCoins} coins`);
+    return { success: true, building, newBalance };
   }
 }

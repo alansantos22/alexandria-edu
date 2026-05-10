@@ -1,5 +1,5 @@
 <template>
-  <div class="v-city" :class="{ 'v-city--build': build.isActive.value }">
+  <div class="v-city" :class="{ 'v-city--build': build.isActive.value, 'v-city--delete': build.deleteMode.value }">
 
     <!-- Canvas WebGL -->
     <canvas ref="canvasRef" class="v-city__canvas" />
@@ -94,12 +94,29 @@
           :percent="build.ccuPercent.value"
         />
 
-        <!-- Selected item hint -->
-        <div v-if="build.selectedItem.value" class="v-city__hud-placing">
+        <!-- Mode toggle: Construir / Apagar -->
+        <div class="v-city__hud-modes">
+          <button
+            class="v-city__hud-mode-btn"
+            :class="{ 'v-city__hud-mode-btn--active': !build.deleteMode.value }"
+            @click="build.deleteMode.value && build.toggleDeleteMode()"
+          >🏗️ Construir</button>
+          <button
+            class="v-city__hud-mode-btn v-city__hud-mode-btn--danger"
+            :class="{ 'v-city__hud-mode-btn--active': build.deleteMode.value }"
+            @click="build.toggleDeleteMode()"
+          >🗑️ Apagar</button>
+        </div>
+
+        <!-- Selected item hint (placement mode only) -->
+        <div v-if="build.selectedItem.value && !build.deleteMode.value" class="v-city__hud-placing">
           <span>{{ build.selectedItem.value.icon }}</span>
           <span>{{ build.selectedItem.value.name }}</span>
           <button class="v-city__hud-placing-cancel" @click="build.clearSelection()">✕</button>
         </div>
+        <p v-else-if="build.deleteMode.value" class="v-city__hud-hint v-city__hud-hint--delete">
+          Clique em uma construção para apagá-la
+        </p>
         <p v-else class="v-city__hud-hint">Selecione um item abaixo para construir</p>
 
       </div>
@@ -107,7 +124,7 @@
 
     <!-- Build hints (bottom-right, build mode) -->
     <div v-if="build.isActive.value" class="v-city__hud-controls v-city__hud-controls--build">
-      <span>Click · Posicionar</span>
+      <span>{{ build.deleteMode.value ? 'Click · Apagar' : 'Click · Posicionar' }}</span>
       <span>Arrastar · Pan</span>
       <span>Scroll · Zoom</span>
     </div>
@@ -178,7 +195,7 @@ const showExploreHUD = computed(() =>
 const renderer = useCityRenderer(canvasRef)
 const build    = useBuildMode(renderer)
 
-const { init, loadCity: renderChunks, resize, dispose } = renderer
+const { init, loadCity: renderChunks, resize, dispose, loadBuildings } = renderer
 
 // ── Build mode toggle ─────────────────────────────────────────────────
 async function toggleBuildMode() {
@@ -193,18 +210,23 @@ async function toggleBuildMode() {
 async function loadCity() {
   state.value = 'loading'
   try {
-    const cityData = isVisiting.value
-      ? await cityService.getCity(route.params.userId)
-      : await cityService.getMyCity()
-
-    const vehicleData = isVisiting.value ? [] : await cityService.getVehicles()
+    const [cityData, vehicleData, buildingsData] = await Promise.all([
+      isVisiting.value ? cityService.getCity(route.params.userId) : cityService.getMyCity(),
+      isVisiting.value ? Promise.resolve([]) : cityService.getVehicles(),
+      isVisiting.value ? Promise.resolve([]) : cityService.getBuildings(),
+    ])
 
     meta.value     = cityData.meta
     vehicles.value = vehicleData
 
     renderChunks(cityData.chunks)
 
-    state.value = cityData.chunks.length === 0 ? 'empty' : 'ready'
+    // Render placed GLB buildings in explore mode
+    if (buildingsData.length > 0) {
+      loadBuildings(buildingsData)
+    }
+
+    state.value = (cityData.chunks.length === 0 && buildingsData.length === 0) ? 'empty' : 'ready'
   } catch (e) {
     errorMsg.value = e?.response?.data?.message ?? 'Não foi possível carregar a cidade.'
     state.value    = 'error'
@@ -248,7 +270,8 @@ onBeforeUnmount(() => {
     &:active { cursor: grabbing; }
   }
 
-  &--build &__canvas { cursor: crosshair; }
+  &--build &__canvas  { cursor: crosshair; }
+  &--delete &__canvas { cursor: cell; }
 
   // ── Overlays ─────────────────────────────────────────────────────
   &__overlay {
@@ -503,6 +526,41 @@ onBeforeUnmount(() => {
     color: $neutral-500;
     font-family: var(--font-display);
     margin: 0;
+
+    &--delete { color: $state-error; }
+  }
+
+  // ── Mode toggle buttons (build / delete) ─────────────────────────
+  &__hud-modes {
+    display: flex;
+    gap: $space-2;
+  }
+
+  &__hud-mode-btn {
+    flex: 1;
+    padding: $space-1 $space-2;
+    border-radius: $radius-md;
+    border: 1px solid rgba($neutral-600, 0.3);
+    background: rgba($neutral-800, 0.6);
+    color: $neutral-500;
+    font-size: 0.72rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background $dur-fast $ease-out, border-color $dur-fast $ease-out,
+                color $dur-fast $ease-out;
+
+    &--active {
+      background: rgba($brand-primary, 0.18);
+      border-color: rgba($brand-primary, 0.5);
+      color: $brand-primary-soft;
+    }
+
+    &--danger#{&}--active {
+      background: rgba($state-error, 0.15);
+      border-color: rgba($state-error, 0.45);
+      color: $state-error;
+    }
   }
 }
 

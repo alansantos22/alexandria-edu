@@ -10,7 +10,7 @@
           Marketplace
         </h1>
         <p class="p-marketplace__lead">
-          Personalize seu perfil com avatares, molduras e wallpapers exclusivos.
+          Personalize seu perfil e desbloqueie edifícios para sua cidade.
         </p>
       </div>
 
@@ -103,6 +103,7 @@ import BuyConfirmModal        from '@/components/marketplace/BuyConfirmModal.vue
 const { balance, applyReward, fetchBalance } = useEconomyStore()
 
 const items        = ref([])
+const buildings    = ref([])
 const activeSeason = ref(null)
 const loading      = ref(true)
 const purchasing   = ref(false)
@@ -120,13 +121,19 @@ const filters = [
   { value: 'badge',     label: 'Emblemas',   icon: '🏅' },
   { value: 'wallpaper', label: 'Wallpapers', icon: '🖼️' },
   { value: 'palette',   label: 'Paletas',    icon: '🎨' },
+  { value: 'building',  label: 'Edifícios',  icon: '🏗️' },
 ]
 
-const filteredItems = computed(() =>
-  activeFilter.value === 'all'
-    ? items.value
-    : items.value.filter(i => i.type === activeFilter.value),
-)
+const allItems = computed(() => {
+  const cosmetics = items.value
+  const blds      = buildings.value
+  return [...cosmetics, ...blds]
+})
+
+const filteredItems = computed(() => {
+  if (activeFilter.value === 'all') return allItems.value
+  return allItems.value.filter(i => i.type === activeFilter.value)
+})
 
 // ── Season countdown ──────────────────────────────────────────────────────
 const timeRemaining = computed(() => {
@@ -144,9 +151,13 @@ const timeRemaining = computed(() => {
 async function loadItems() {
   loading.value = true
   try {
-    const data      = await marketplaceService.listItems()
-    items.value     = data.items
-    activeSeason.value = data.activeSeason
+    const [cosmeticsData, buildingsData] = await Promise.all([
+      marketplaceService.listItems(),
+      marketplaceService.listBuildings(),
+    ])
+    items.value        = cosmeticsData.items
+    activeSeason.value = cosmeticsData.activeSeason
+    buildings.value    = buildingsData.buildings
   } catch {
     // silencioso; o interceptor de axios já redireciona no 401
   } finally {
@@ -166,21 +177,25 @@ async function confirmPurchase() {
   if (!selectedItem.value) return
   purchasing.value = true
   try {
-    const result = await marketplaceService.buyItem(selectedItem.value.id)
+    const item = selectedItem.value
+    let result
 
-    // Atualiza balance reativo no store de economy
-    applyReward(-selectedItem.value.priceCoins, result.newBalance)
-    fetchBalance()
-
-    // Marca item como adquirido na lista local (sem re-fetch)
-    const idx = items.value.findIndex(i => i.id === selectedItem.value.id)
-    if (idx !== -1) {
-      items.value[idx] = { ...items.value[idx], owned: true }
+    if (item.type === 'building') {
+      result = await marketplaceService.buyBuilding(item.id)
+      applyReward(-item.priceCoins, result.newBalance)
+      fetchBalance()
+      const idx = buildings.value.findIndex(b => b.id === item.id)
+      if (idx !== -1) buildings.value[idx] = { ...buildings.value[idx], owned: true }
+    } else {
+      result = await marketplaceService.buyItem(item.id)
+      applyReward(-item.priceCoins, result.newBalance)
+      fetchBalance()
+      const idx = items.value.findIndex(i => i.id === item.id)
+      if (idx !== -1) items.value[idx] = { ...items.value[idx], owned: true }
     }
 
     selectedItem.value = null
   } catch (err) {
-    // Exibe mensagem de erro embutida no modal (já tratado pelo interceptor de axios)
     console.error(err)
   } finally {
     purchasing.value = false

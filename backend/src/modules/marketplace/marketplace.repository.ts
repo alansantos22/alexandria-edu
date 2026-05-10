@@ -8,6 +8,8 @@ import { UserInventory }              from './entities/user-inventory.entity';
 import { UserProfileCustomization }   from './entities/user-profile-customization.entity';
 import { RedemptionToken }            from './entities/redemption-token.entity';
 import type { ItemType }              from './entities/marketplace-item.entity';
+import { CityPaletteItem }            from '../city/entities/city-palette-item.entity';
+import { UserBuildingUnlock }         from '../city/entities/user-building-unlock.entity';
 
 @Injectable()
 export class MarketplaceRepository {
@@ -26,6 +28,12 @@ export class MarketplaceRepository {
 
     @InjectRepository(RedemptionToken)
     private readonly tokenRepo: Repository<RedemptionToken>,
+
+    @InjectRepository(CityPaletteItem)
+    private readonly paletteRepo: Repository<CityPaletteItem>,
+
+    @InjectRepository(UserBuildingUnlock)
+    private readonly buildingUnlockRepo: Repository<UserBuildingUnlock>,
   ) {}
 
   // ─── Items ─────────────────────────────────────────────────────────────────
@@ -117,6 +125,33 @@ export class MarketplaceRepository {
 
   findProfile(userId: string): Promise<UserProfileCustomization | null> {
     return this.profileRepo.findOne({ where: { userId } });
+  }
+
+  // ─── Buildings (city_palette) ────────────────────────────────────────────────────
+
+  findActivePaletteItems(): Promise<CityPaletteItem[]> {
+    return this.paletteRepo.find({
+      where: { isActive: true as any },
+      order: { category: 'ASC', sortOrder: 'ASC' },
+    });
+  }
+
+  findPaletteItemById(id: string): Promise<CityPaletteItem | null> {
+    return this.paletteRepo.findOne({ where: { id, isActive: true as any } });
+  }
+
+  findUserBuildingUnlocks(userId: string): Promise<UserBuildingUnlock[]> {
+    return this.buildingUnlockRepo.find({ where: { userId } });
+  }
+
+  async userOwnsBuilding(userId: string, paletteItemId: string): Promise<boolean> {
+    const count = await this.buildingUnlockRepo.count({ where: { userId, paletteItemId } });
+    return count > 0;
+  }
+
+  addBuildingUnlock(userId: string, paletteItemId: string): Promise<UserBuildingUnlock> {
+    const record = this.buildingUnlockRepo.create({ userId, paletteItemId });
+    return this.buildingUnlockRepo.save(record);
   }
 
   // ─── Vault ─────────────────────────────────────────────────────────────────

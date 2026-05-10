@@ -8,11 +8,14 @@ import {
   Matrix4, Vector3,
   Raycaster, Plane, TextureLoader,
   SRGBColorSpace, ACESFilmicToneMapping,
+  BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const CHUNK_SIZE = 16
 const CELL       = 1.4   // world units per grid cell
+export const GRID_EXTENT    = 50              // max cells across all possible tiles
+export const CELLS_PER_TILE = 10             // build grid cells per land tile (tile 0–4 → cells 0–49)
 
 // Procedural chunk type → [heightY, hex color]
 const BUILDING_DEFS = {
@@ -46,7 +49,10 @@ export function useCityRenderer(canvasRef) {
 
   // Build mode internals
   let buildGrid    = null
+  let buildBorder  = null
   let ghostMesh    = null
+  let ownedTileSet = new Set()   // "tileX,tileZ" strings
+  const tileMeshes = []         // floor planes + border lines per owned tile
   let _buildHoverCb = null
   let _buildClickCb = null
   const placedMeshes = new Map()  // buildingId → Mesh
@@ -253,7 +259,14 @@ export function useCityRenderer(canvasRef) {
 
   function loadCity(chunks) {
     _clearMeshes()
-    if (!chunks.length) return
+    _clearPlacedMeshes() // reset before re-render (e.g. retry)
+    if (!chunks.length) {
+      // Center camera on build zone when city is empty
+      const zoneCenter = GRID_EXTENT * CELL / 2
+      cam.target.set(zoneCenter, 0, zoneCenter)
+      _positionCamera()
+      return
+    }
 
     const byType = new Map()
     for (const chunk of chunks) {
@@ -322,21 +335,111 @@ export function useCityRenderer(canvasRef) {
   function enterBuildMode(buildings) {
     buildMode = true
 
-    // Show fine build grid aligned to CELL (1.4 units): 100 cells × 1.4 = 140 units
+    // Align build grid to zone (center = GRID_EXTENT*CELL/2)
+    const zoneCenter = GRID_EXTENT * CELL / 2
     if (!buildGrid) {
-      buildGrid = new GridHelper(140, 100, 0x6c5ce7, 0x3d2080)
+      buildGrid = new GridHelper(GRID_EXTENT * CELL, GRID_EXTENT, 0x6c5ce7, 0x3d2080)
       buildGrid.material.opacity = 0
       buildGrid.material.transparent = true
       scene.add(buildGrid)
     }
-    buildGrid.position.set(cam.target.x, 0.01, cam.target.z)
+    buildGrid.position.set(zoneCenter, 0.01, zoneCenter)
     buildGrid.visible = true
     _fadeBuildGrid(0, 0.7, 400)
 
-    // Load placed buildings into scene
-    for (const b of buildings) {
-      _addPlacedMesh(b)
+    // Build zone boundary outline
+    if (!buildBorder) {
+      const W = GRID_EXTENT * CELL
+      const y = 0.05
+      const pts = new Float32Array([
+        0, y, 0,   W, y, 0,
+        W, y, 0,   W, y, W,
+        W, y, W,   0, y, W,
+        0, y, W,   0, y, 0,
+      ])
+      const geo = new BufferGeometry()
+      geo.setAttribute('position', new Float32BufferAttribute(pts, 3))
+      buildBorder = new LineSegments(geo, new LineBasicMaterial({ color: 0x6c5ce7 }))
+      scene.add(buildBorder)
     }
+    buildBorder.visible = true
+
+    // Load placed buildings into scene (skip already loaded)
+    for (const b of buildings) {
+      if (!placedMeshes.has(b.id)) {
+        _addPlacedMesh(b)
+      }
+    }
+  }
+
+  // ── Owned tile visualization ───────────────────────────────────────
+
+  function setOwnedTiles(tiles) {
+    _clearTileVisualization()
+    ownedTileSet = new Set(tiles.map(t => `${t.tileX},${t.tileZ}`))
+    _buildTileVisualization(tiles)
+  }
+
+  function _buildTileVisualization(tiles) {
+    const size = CELLS_PER_TILE * CELL
+    for (const { tileX, tileZ } of tiles) {
+      const ox = tileX * size
+      const oz = tileZ * size
+
+      // Semi-transparent teal floor per owned tile
+      const geo = new PlaneGeometry(size, size)
+      const mat = new MeshBasicMaterial({ color: 0x00d9c0, transparent: true, opacity: 0.06, depthWrite: false })
+      const floor = new Mesh(geo, mat)
+      floor.rotation.x = -Math.PI / 2
+      floor.position.set(ox + size / 2, 0.02, oz + size / 2)
+      scene.add(floor)
+      tileMeshes.push(floor)
+
+      // Tile border outline
+      const y = 0.04
+      const pts = new Float32Array([
+        ox,        y, oz,          ox + size, y, oz,
+        ox + size, y, oz,          ox + size, y, oz + size,
+        ox + size, y, oz + size,   ox,        y, oz + size,
+        ox,        y, oz + size,   ox,        y, oz,
+      ])
+      const bgeo = new BufferGeometry()
+      bgeo.setAttribute('position', new Float32BufferAttribute(pts, 3))
+      const border = new LineSegments(bgeo, new LineBasicMaterial({ color: 0x00d9c0, transparent: true, opacity: 0.55 }))
+      scene.add(border)
+      tileMeshes.push(border)
+    }
+  }
+
+  function _clearTileVisualization() {
+    for (const m of tileMeshes) {
+      scene.remove(m)
+      m.geometry.dispose()
+      if (Array.isArray(m.material)) m.material.forEach(x => x.dispose())
+      else m.material.dispose()
+    }
+    tileMeshes.length = 0
+    ownedTileSet = new Set()
+  }
+
+  // ── Pick placed building by screen coords ──────────────────────────
+
+  function pickPlacedBuilding(clientX, clientY) {
+    const canvas = canvasRef.value
+    if (!canvas || !placedMeshes.size) return null
+    const rect = canvas.getBoundingClientRect()
+    const nx = ((clientX - rect.left) / rect.width)  * 2 - 1
+    const ny = -((clientY - rect.top)  / rect.height) * 2 + 1
+    raycaster.setFromCamera({ x: nx, y: ny }, camera)
+    const hits = raycaster.intersectObjects(Array.from(placedMeshes.values()), true)
+    if (!hits.length) return null
+    // Walk up the parent chain to find the root mesh with buildingId
+    let node = hits[0].object
+    while (node) {
+      if (node.userData.buildingId) return node.userData.buildingId
+      node = node.parent
+    }
+    return null
   }
 
   function exitBuildMode() {
@@ -344,8 +447,10 @@ export function useCityRenderer(canvasRef) {
     _fadeBuildGrid(0.7, 0, 300, () => {
       if (buildGrid) buildGrid.visible = false
     })
+    if (buildBorder) buildBorder.visible = false
+    _clearTileVisualization()
     _clearGhostMesh()
-    _clearPlacedMeshes()
+    // Placed building meshes are kept alive — they persist in explore mode
     _buildHoverCb = null
     _buildClickCb = null
   }
@@ -367,10 +472,20 @@ export function useCityRenderer(canvasRef) {
     if (!intersects.length) return null
 
     const pt = intersects[0].point
-    return {
-      gridX: Math.floor(pt.x / CELL),
-      gridZ: Math.floor(pt.z / CELL),
+    const gridX = Math.floor(pt.x / CELL)
+    const gridZ = Math.floor(pt.z / CELL)
+
+    // Reject clicks outside the absolute build zone
+    if (gridX < 0 || gridX >= GRID_EXTENT || gridZ < 0 || gridZ >= GRID_EXTENT) return null
+
+    // Reject clicks outside owned land tiles
+    if (ownedTileSet.size > 0) {
+      const tx = Math.floor(gridX / CELLS_PER_TILE)
+      const tz = Math.floor(gridZ / CELLS_PER_TILE)
+      if (!ownedTileSet.has(`${tx},${tz}`)) return null
     }
+
+    return { gridX, gridZ }
   }
 
   function setGhostItem(item) {
@@ -413,6 +528,15 @@ export function useCityRenderer(canvasRef) {
 
   function addPlacedBuilding(building) {
     _addPlacedMesh(building)
+  }
+
+  /** Load placed buildings in explore mode (skips already-loaded meshes). */
+  function loadBuildings(buildings) {
+    for (const b of buildings) {
+      if (!placedMeshes.has(b.id)) {
+        _addPlacedMesh(b)
+      }
+    }
   }
 
   function removePlacedBuilding(buildingId) {
@@ -595,7 +719,8 @@ export function useCityRenderer(canvasRef) {
     ground?.material.dispose()
     buildGrid?.geometry.dispose()
     buildGrid?.material.dispose()
-    renderer?.dispose()
+    buildBorder?.geometry.dispose()
+    buildBorder?.material.dispose()    _clearTileVisualization();    renderer?.dispose()
   }
 
   return {
@@ -608,5 +733,7 @@ export function useCityRenderer(canvasRef) {
     raycastToGrid,
     setGhostItem, moveGhost, clearGhost,
     addPlacedBuilding, removePlacedBuilding, replacePlacedBuilding,
+    loadBuildings,
+    setOwnedTiles, pickPlacedBuilding,
   }
 }

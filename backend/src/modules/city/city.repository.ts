@@ -7,6 +7,7 @@ import { CityChunk } from './entities/city-chunk.entity';
 import { UserVehicle } from './entities/user-vehicle.entity';
 import { CityPaletteItem } from './entities/city-palette-item.entity';
 import { CityBuilding } from './entities/city-building.entity';
+import { UserBuildingUnlock } from './entities/user-building-unlock.entity';
 
 @Injectable()
 export class CityRepository {
@@ -21,6 +22,8 @@ export class CityRepository {
     private readonly paletteRepo: Repository<CityPaletteItem>,
     @InjectRepository(CityBuilding)
     private readonly buildingRepo: Repository<CityBuilding>,
+    @InjectRepository(UserBuildingUnlock)
+    private readonly buildingUnlockRepo: Repository<UserBuildingUnlock>,
   ) {}
 
   // ── City Meta ──────────────────────────────────────────────
@@ -133,6 +136,24 @@ export class CityRepository {
       relations: ['buildingAsset', 'buildingAsset.material'],
       order: { category: 'ASC', sortOrder: 'ASC' },
     });
+  }
+
+  /** Returns only the buildings a user has unlocked + all free (priceCoins=0) buildings. */
+  async findMyPalette(userId: string): Promise<CityPaletteItem[]> {
+    const all = await this.findPalette();
+    const unlocks = await this.buildingUnlockRepo.find({ where: { userId } });
+    const unlockedSet = new Set(unlocks.map(u => u.paletteItemId));
+    return all.filter(item => item.priceCoins === 0 || unlockedSet.has(item.id));
+  }
+
+  async hasUnlockedBuilding(userId: string, paletteItemId: string): Promise<boolean> {
+    const count = await this.buildingUnlockRepo.count({ where: { userId, paletteItemId } });
+    return count > 0;
+  }
+
+  async unlockBuilding(userId: string, paletteItemId: string): Promise<UserBuildingUnlock> {
+    const record = this.buildingUnlockRepo.create({ id: randomUUID(), userId, paletteItemId });
+    return this.buildingUnlockRepo.save(record);
   }
 
   async findPaletteItem(id: string): Promise<CityPaletteItem | null> {

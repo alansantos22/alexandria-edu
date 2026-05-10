@@ -8,6 +8,8 @@ import { MarketplaceSeason }            from './entities/marketplace-season.enti
 import { UserInventory }                from './entities/user-inventory.entity';
 import { UserProfileCustomization }     from './entities/user-profile-customization.entity';
 import { RedemptionToken }              from './entities/redemption-token.entity';
+import { CityPaletteItem }              from '../city/entities/city-palette-item.entity';
+import { UserBuildingUnlock }           from '../city/entities/user-building-unlock.entity';
 
 import { MarketplaceRepository }  from './marketplace.repository';
 import { MarketplaceService }     from './marketplace.service';
@@ -22,6 +24,8 @@ import { AdminVaultController }   from './admin-vault.controller';
       UserInventory,
       UserProfileCustomization,
       RedemptionToken,
+      CityPaletteItem,
+      UserBuildingUnlock,
     ]),
     EconomyModule,
   ],

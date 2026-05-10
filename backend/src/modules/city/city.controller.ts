@@ -38,6 +38,12 @@ export class CityController {
     return this.cityService.getPalette();
   }
 
+  /** Retorna apenas os edifícios que o usuário possui (desbloqueados + gratuitos) */
+  @Get('palette/my')
+  getMyPalette(@CurrentUser('id') userId: string) {
+    return this.cityService.getMyPalette(userId);
+  }
+
   // ── Buildings ─────────────────────────────────────────────
 
   @Get('buildings')

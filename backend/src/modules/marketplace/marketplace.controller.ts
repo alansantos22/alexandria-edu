@@ -60,4 +60,21 @@ export class MarketplaceController {
   ) {
     return this.marketplaceService.redeemToken(user.id, dto.code);
   }
+
+  // ── Buildings ─────────────────────────────────────────────────────────────
+
+  /** Lista edifícios do city_palette com info de posse/preço */
+  @Get('buildings')
+  listBuildings(@CurrentUser() user: AuthenticatedUser) {
+    return this.marketplaceService.listBuildings(user.id);
+  }
+
+  /** Compra (desbloqueia) um edifício */
+  @Post('buildings/:id/buy')
+  purchaseBuilding(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') paletteItemId: string,
+  ) {
+    return this.marketplaceService.purchaseBuilding(user.id, paletteItemId);
+  }
 }

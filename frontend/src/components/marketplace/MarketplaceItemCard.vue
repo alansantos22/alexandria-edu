@@ -43,6 +43,10 @@
           :style="{ background: color }"
         />
       </div>
+      <!-- Building: mostra o ícone específico do item -->
+      <span v-else-if="item.type === 'building'" class="c-mkt-card__type-icon">
+        {{ item.icon || '🏗️' }}
+      </span>
       <!-- Fallback: emoji do tipo -->
       <span v-else class="c-mkt-card__type-icon">{{ typeIcon }}</span>
     </div>
@@ -75,12 +79,16 @@
         </button>
 
         <button
-          v-else
+          v-else-if="item.type !== 'building'"
           class="c-btn c-btn--sm c-btn--secondary"
           @click.stop="$emit('equip', item)"
         >
           Equipar
         </button>
+
+        <span v-else class="c-mkt-card__badge c-mkt-card__badge--owned" style="font-size:0.75rem;">
+          ✓ Desbloqueado
+        </span>
       </div>
     </div>
   </article>
@@ -109,6 +117,7 @@ const typeIcons = {
   badge:     '🏅',
   frame:     '🪞',
   palette:   '🎨',
+  building:  '🏗️',
 }
 
 const rarityLabel = rarityLabels[props.item.rarity] || props.item.rarity

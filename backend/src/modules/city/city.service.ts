@@ -72,6 +72,10 @@ export class CityService {
     return this.cityRepository.findPalette();
   }
 
+  getMyPalette(userId: string): Promise<CityPaletteItem[]> {
+    return this.cityRepository.findMyPalette(userId);
+  }
+
   // ── Buildings ─────────────────────────────────────────────
 
   getBuildings(userId: string): Promise<CityBuilding[]> {
@@ -84,6 +88,16 @@ export class CityService {
 
     const item = await this.cityRepository.findPaletteItem(dto.paletteItemId);
     if (!item) throw new NotFoundException('Item de construção não encontrado.');
+
+    // Ownership check: paid buildings require unlock
+    if (item.priceCoins > 0) {
+      const owned = await this.cityRepository.hasUnlockedBuilding(userId, dto.paletteItemId);
+      if (!owned) {
+        throw new BadRequestException(
+          'Você precisa desbloquear este edifício no Marketplace antes de posicioná-lo.',
+        );
+      }
+    }
 
     // CCU budget check
     const ccuAfter = meta.ccuUsed + item.ccuCost;

@@ -29,4 +29,14 @@ export const marketplaceService = {
   getPublicProfile(userId) {
     return api.get(`/marketplace/profile/${userId}`).then(r => r.data)
   },
+
+  /** Lista edifícios disponíveis no marketplace com campo `owned` e `canAfford` */
+  listBuildings() {
+    return api.get('/marketplace/buildings').then(r => r.data)
+  },
+
+  /** Compra (desbloqueia) um edifício pelo paletteItemId */
+  buyBuilding(paletteItemId) {
+    return api.post(`/marketplace/buildings/${paletteItemId}/buy`).then(r => r.data)
+  },
 }
