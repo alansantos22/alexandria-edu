@@ -104,10 +104,8 @@
       </section>
 
       <!-- ── Conteúdo ─────────────────────────────────────────────────────── -->
-      <section v-show="activeTab === 'conteudo'" class="p-admin__empty a-fade-in-up">
-        <Library :size="40" class="p-admin__empty-icon" />
-        <h2>Gestão de Conteúdo</h2>
-        <p>Criação e organização de trilhas e aulas — em breve.</p>
+      <section v-show="activeTab === 'conteudo'" class="a-fade-in-up">
+        <AdminContent />
       </section>
 
       <!-- ── Usuários ─────────────────────────────────────────────────────── -->
@@ -133,6 +131,7 @@ import {
 import AdminUploadBackground from '@/components/admin/AdminUploadBackground.vue'
 import AdminCreatePalette    from '@/components/admin/AdminCreatePalette.vue'
 import AdminCreateBuilding   from '@/components/admin/AdminCreateBuilding.vue'
+import AdminContent          from '@/components/admin/AdminContent.vue'
 
 const tabs = [
   { key: 'painel',      label: 'Painel',      icon: LayoutDashboard },

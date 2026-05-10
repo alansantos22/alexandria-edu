@@ -13,4 +13,5 @@ CREATE TABLE IF NOT EXISTS city_palette_assets (
     REFERENCES city_palette(id) ON DELETE CASCADE
 );
 
-INSERT IGNORE INTO migrations (name) VALUES ('007-building-assets');
+INSERT IGNORE INTO migrations (filename, applied_at, status)
+VALUES ('007-building-assets.sql', NOW(), 'applied');
