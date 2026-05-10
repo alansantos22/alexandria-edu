@@ -3,11 +3,12 @@ import {
   WebGLRenderer, Scene, OrthographicCamera, Color, FogExp2,
   AmbientLight, DirectionalLight,
   BoxGeometry, PlaneGeometry, GridHelper,
-  MeshLambertMaterial, MeshBasicMaterial,
+  MeshLambertMaterial, MeshStandardMaterial, MeshBasicMaterial,
   InstancedMesh, Mesh,
   Matrix4, Vector3,
-  Raycaster, Plane,
+  Raycaster, Plane, TextureLoader,
 } from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const CHUNK_SIZE = 16
 const CELL       = 1.4   // world units per grid cell
@@ -414,8 +415,7 @@ export function useCityRenderer(canvasRef) {
     const mesh = placedMeshes.get(buildingId)
     if (!mesh) return
     scene.remove(mesh)
-    mesh.geometry.dispose()
-    mesh.material.dispose()
+    _disposeObject(mesh)
     placedMeshes.delete(buildingId)
   }
 
@@ -430,9 +430,18 @@ export function useCityRenderer(canvasRef) {
   function _addPlacedMesh(building) {
     const item = building.paletteItem
     if (!item) return
-    const w = item.sizeX * CELL * 0.92
-    const d = item.sizeZ * CELL * 0.92
-    const h = _categoryHeight(item)
+    if (item.modelUrl) {
+      _addGLBMesh(building)
+    } else {
+      _addBoxMesh(building)
+    }
+  }
+
+  function _addBoxMesh(building) {
+    const item  = building.paletteItem
+    const w     = item.sizeX * CELL * 0.92
+    const d     = item.sizeZ * CELL * 0.92
+    const h     = _categoryHeight(item)
     const color = CATEGORY_COLORS[item.category] ?? 0xaaaaaa
 
     const geo  = new BoxGeometry(w, h, d)
@@ -449,6 +458,49 @@ export function useCityRenderer(canvasRef) {
     placedMeshes.set(building.id, mesh)
   }
 
+  function _addGLBMesh(building) {
+    const item  = building.paletteItem
+    const asset = item.buildingAsset
+    const loader = new GLTFLoader()
+    const texLoader = new TextureLoader()
+
+    loader.load(item.modelUrl, (gltf) => {
+      const root = gltf.scene
+      const s = asset?.scaleFactor ?? 1
+      root.scale.setScalar(s)
+
+      root.traverse((node) => {
+        if (!node.isMesh) return
+        const mat = new MeshStandardMaterial({
+          roughness: asset?.roughness ?? 0.7,
+          metalness: asset?.metalness ?? 0.0,
+        })
+        if (asset?.textureAlbedo)             { mat.map          = texLoader.load(asset.textureAlbedo) }
+        if (asset?.textureNormal)             { mat.normalMap    = texLoader.load(asset.textureNormal) }
+        if (asset?.textureRoughnessMetalness) {
+          const rm = texLoader.load(asset.textureRoughnessMetalness)
+          mat.roughnessMap = rm
+          mat.metalnessMap = rm
+        }
+        if (asset?.textureAo) { mat.aoMap = texLoader.load(asset.textureAo) }
+        node.material = mat
+        node.castShadow = node.receiveShadow = true
+      })
+
+      root.position.set(
+        building.gridX * CELL + item.sizeX * CELL / 2,
+        0,
+        building.gridZ * CELL + item.sizeZ * CELL / 2,
+      )
+      root.userData.buildingId = building.id
+      scene.add(root)
+      placedMeshes.set(building.id, root)
+    }, undefined, () => {
+      // Fallback to box on load error
+      _addBoxMesh(building)
+    })
+  }
+
   function _clearGhostMesh() {
     if (!ghostMesh) return
     scene.remove(ghostMesh)
@@ -457,11 +509,20 @@ export function useCityRenderer(canvasRef) {
     ghostMesh = null
   }
 
+  function _disposeObject(obj) {
+    obj.traverse((child) => {
+      if (child.geometry) child.geometry.dispose()
+      if (child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material]
+        mats.forEach(m => m.dispose())
+      }
+    })
+  }
+
   function _clearPlacedMeshes() {
     placedMeshes.forEach((mesh) => {
       scene.remove(mesh)
-      mesh.geometry.dispose()
-      mesh.material.dispose()
+      _disposeObject(mesh)
     })
     placedMeshes.clear()
   }

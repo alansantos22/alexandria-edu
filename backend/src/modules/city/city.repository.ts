@@ -130,12 +130,13 @@ export class CityRepository {
   async findPalette(): Promise<CityPaletteItem[]> {
     return this.paletteRepo.find({
       where: { isActive: true as any },
+      relations: ['buildingAsset'],
       order: { category: 'ASC', sortOrder: 'ASC' },
     });
   }
 
   async findPaletteItem(id: string): Promise<CityPaletteItem | null> {
-    return this.paletteRepo.findOne({ where: { id, isActive: true as any } });
+    return this.paletteRepo.findOne({ where: { id, isActive: true as any }, relations: ['buildingAsset'] });
   }
 
   // ── Buildings ─────────────────────────────────────────────
@@ -143,12 +144,13 @@ export class CityRepository {
   async findBuildings(userId: string): Promise<CityBuilding[]> {
     return this.buildingRepo.find({
       where: { cityUserId: userId },
+      relations: ['paletteItem', 'paletteItem.buildingAsset'],
       order: { placedAt: 'ASC' },
     });
   }
 
   async findBuilding(id: string, userId: string): Promise<CityBuilding | null> {
-    return this.buildingRepo.findOne({ where: { id, cityUserId: userId } });
+    return this.buildingRepo.findOne({ where: { id, cityUserId: userId }, relations: ['paletteItem', 'paletteItem.buildingAsset'] });
   }
 
   async createBuilding(

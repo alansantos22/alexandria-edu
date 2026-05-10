@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, OneToOne, PrimaryColumn } from 'typeorm';
+import { BuildingAsset } from './building-asset.entity';
 
 @Entity({ name: 'city_palette' })
 export class CityPaletteItem {
@@ -43,4 +44,7 @@ export class CityPaletteItem {
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
+
+  @OneToOne(() => BuildingAsset, { nullable: true })
+  buildingAsset: BuildingAsset | null;
 }

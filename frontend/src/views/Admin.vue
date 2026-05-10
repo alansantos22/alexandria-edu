@@ -98,6 +98,11 @@
         <AdminCreatePalette @created="onItemCreated" />
       </section>
 
+      <!-- ── Edifícios ──────────────────────────────────────────────────────── -->
+      <section v-show="activeTab === 'edificios'" class="c-bento p-admin__grid a-fade-in-up">
+        <AdminCreateBuilding @created="onItemCreated" />
+      </section>
+
       <!-- ── Conteúdo ─────────────────────────────────────────────────────── -->
       <section v-show="activeTab === 'conteudo'" class="p-admin__empty a-fade-in-up">
         <Library :size="40" class="p-admin__empty-icon" />
@@ -122,15 +127,17 @@ import api from '@/core/api'
 import {
   ShieldCheck, Crown, LogOut, Settings, Radio,
   Link as LinkIcon, Save, ExternalLink, CircleCheck, CircleAlert,
-  Users, Library, ShoppingBag, LayoutDashboard,
+  Users, Library, ShoppingBag, LayoutDashboard, Box,
 } from 'lucide-vue-next'
 
 import AdminUploadBackground from '@/components/admin/AdminUploadBackground.vue'
 import AdminCreatePalette    from '@/components/admin/AdminCreatePalette.vue'
+import AdminCreateBuilding   from '@/components/admin/AdminCreateBuilding.vue'
 
 const tabs = [
   { key: 'painel',      label: 'Painel',      icon: LayoutDashboard },
   { key: 'marketplace', label: 'Marketplace',  icon: ShoppingBag },
+  { key: 'edificios',   label: 'Edifícios',    icon: Box },
   { key: 'conteudo',    label: 'Conteúdo',     icon: Library },
   { key: 'usuarios',    label: 'Usuários',     icon: Users },
 ]

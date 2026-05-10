@@ -27,3 +27,21 @@ export async function adminToggleItem(id, active) {
   const { data } = await api.patch(`/admin/items/${id}/toggle`, { active })
   return data
 }
+
+export async function adminCreateBuilding(formData, queryParams) {
+  const { data } = await api.post('/admin/buildings', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: queryParams,
+  })
+  return data
+}
+
+export async function adminListBuildings() {
+  const { data } = await api.get('/admin/buildings')
+  return data
+}
+
+export async function adminToggleBuilding(id, active) {
+  const { data } = await api.patch(`/admin/buildings/${id}/toggle`, { active })
+  return data
+}
