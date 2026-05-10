@@ -1,27 +1,17 @@
-import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
+import { CityMaterial } from './city-material.entity';
 
 @Entity({ name: 'city_palette_assets' })
 export class BuildingAsset {
   @PrimaryColumn({ name: 'palette_item_id', type: 'varchar', length: 36 })
   paletteItemId: string;
 
-  @Column({ name: 'texture_albedo', nullable: true, length: 512 })
-  textureAlbedo: string | null;
+  @Column({ name: 'material_id', nullable: true, length: 36 })
+  materialId: string | null;
 
-  @Column({ name: 'texture_normal', nullable: true, length: 512 })
-  textureNormal: string | null;
-
-  @Column({ name: 'texture_roughness_metalness', nullable: true, length: 512 })
-  textureRoughnessMetalness: string | null;
-
-  @Column({ name: 'texture_ao', nullable: true, length: 512 })
-  textureAo: string | null;
-
-  @Column({ type: 'float', default: 0.7 })
-  roughness: number;
-
-  @Column({ type: 'float', default: 0.0 })
-  metalness: number;
+  @ManyToOne(() => CityMaterial, { nullable: true, eager: true })
+  @JoinColumn({ name: 'material_id' })
+  material: CityMaterial | null;
 
   @Column({ name: 'scale_factor', type: 'float', default: 1.0 })
   scaleFactor: number;

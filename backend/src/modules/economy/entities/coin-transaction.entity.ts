@@ -12,7 +12,8 @@ export type CoinEventType =
   | 'QUIZ_PASS_90'
   | 'DAILY_STREAK'
   | 'COURSE_PURCHASE_CASHBACK'
-  | 'MARKETPLACE_PURCHASE';
+  | 'MARKETPLACE_PURCHASE'
+  | 'ADMIN_ADJUSTMENT';
 
 @Entity({ name: 'coin_transactions' })
 export class CoinTransaction {

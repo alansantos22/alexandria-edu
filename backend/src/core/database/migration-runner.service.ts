@@ -94,19 +94,83 @@ export class MigrationRunnerService implements OnApplicationBootstrap {
     await queryRunner.connect();
 
     try {
-      const statements = sql
-        .split('\n')
-        .map((line) => line.replace(/--.*$/, '')) // remove comentários inline
-        .join('\n')
-        .split(';')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-
+      const statements = this.splitSqlStatements(sql);
       for (const stmt of statements) {
         await queryRunner.query(stmt);
       }
     } finally {
       await queryRunner.release();
     }
+  }
+
+  /**
+   * Divide um arquivo SQL em statements individuais, respeitando blocos BEGIN...END
+   * de stored procedures. O separador normal é ';', mas dentro de um bloco
+   * BEGIN...END os ';' são preservados como parte do statement.
+   */
+  private splitSqlStatements(sql: string): string[] {
+    // Remove comentários de linha (-- ...) preservando a estrutura de linhas
+    const cleaned = sql
+      .split('\n')
+      .map((line) => line.replace(/--.*$/, ''))
+      .join('\n');
+
+    const stmts: string[] = [];
+    let buf = '';
+    let depth = 0; // profundidade de aninhamento BEGIN...END
+    let i = 0;
+
+    while (i < cleaned.length) {
+      const slice = cleaned.slice(i);
+
+      // END IF / END LOOP / END WHILE / END CASE / END REPEAT
+      // Fecham estruturas de controle mas NÃO afetam a profundidade BEGIN...END
+      const endControlMatch = slice.match(/^(END\s+(?:IF|LOOP|WHILE|CASE|REPEAT))\b/i);
+      if (endControlMatch) {
+        buf += endControlMatch[0];
+        i += endControlMatch[0].length;
+        continue;
+      }
+
+      // BEGIN — abre um bloco composto (corpo de procedure/function)
+      const beginMatch = slice.match(/^(BEGIN)\b/i);
+      if (beginMatch) {
+        depth++;
+        buf += beginMatch[0];
+        i += beginMatch[0].length;
+        continue;
+      }
+
+      // END — fecha um bloco BEGIN
+      const endMatch = slice.match(/^(END)\b/i);
+      if (endMatch) {
+        if (depth > 0) depth--;
+        buf += endMatch[0];
+        i += endMatch[0].length;
+        continue;
+      }
+
+      // Ponto-e-vírgula: separador de statement apenas fora de BEGIN...END
+      if (cleaned[i] === ';') {
+        if (depth === 0) {
+          const stmt = buf.trim();
+          if (stmt.length > 0) stmts.push(stmt);
+          buf = '';
+        } else {
+          buf += ';';
+        }
+        i++;
+        continue;
+      }
+
+      buf += cleaned[i];
+      i++;
+    }
+
+    // Captura eventual statement sem ';' no final do arquivo
+    const lastStmt = buf.trim();
+    if (lastStmt.length > 0) stmts.push(lastStmt);
+
+    return stmts;
   }
 }

@@ -53,6 +53,7 @@ export class EconomyService {
       DAILY_STREAK:             'Streak diário mantido',
       COURSE_PURCHASE_CASHBACK: 'Cashback da compra do curso',
       MARKETPLACE_PURCHASE:     'Compra no marketplace',
+      ADMIN_ADJUSTMENT:         'Ajuste manual (admin)',
     };
 
     this.logger.log(`Awarding ${coins} coins to user ${userId} for ${eventType}`);
@@ -97,5 +98,28 @@ export class EconomyService {
   /** Simulação de cashback de compra de curso */
   async simulateCoursePurchaseCashback(userId: string): Promise<CoinTransaction | null> {
     return this.awardCoins(userId, 'COURSE_PURCHASE_CASHBACK');
+  }
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Ajuste manual de moedas pelo admin.
+   * delta > 0 = crédito / delta < 0 = débito.
+   */
+  async adminAdjust(userId: string, delta: number, note: string) {
+    return this.economyRepository.adminAdjust(userId, delta, note);
+  }
+
+  async getUsersWithBalance(page: number, limit: number) {
+    return this.economyRepository.getUsersWithBalance(page, limit);
+  }
+
+  async getFlaggedUsers(page: number, limit: number, onlyPending: boolean) {
+    return this.economyRepository.getFlaggedUsers(page, limit, onlyPending);
+  }
+
+  async reviewFlag(flagId: string, adminId: string) {
+    await this.economyRepository.reviewFlag(flagId, adminId);
+    return { ok: true };
   }
 }

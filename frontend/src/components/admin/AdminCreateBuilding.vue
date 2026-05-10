@@ -4,8 +4,8 @@
     <p class="c-card__eyebrow">Asset Pipeline</p>
     <h2 class="c-card__title">Edifício 3D</h2>
     <p class="c-card__body">
-      Suba o modelo GLB e as texturas PBR separadamente. O sistema associa tudo
-      e carrega na cidade do aluno com materiais corretos.
+      Suba o modelo GLB. Associe um material reutilizável criado na seção acima
+      para aplicar texturas PBR na cidade do aluno.
     </p>
 
     <!-- ── Preview Three.js ──────────────────────────────────────────── -->
@@ -16,6 +16,14 @@
         <span>Selecione um GLB para visualizar</span>
       </div>
       <span class="p-admin__building-preview-label">Preview ao vivo</span>
+      <div v-if="previewReady" class="p-admin__zoom-controls">
+        <button type="button" class="p-admin__zoom-btn" title="Zoom in" @click="zoomIn">
+          <ZoomIn :size="16" />
+        </button>
+        <button type="button" class="p-admin__zoom-btn" title="Zoom out" @click="zoomOut">
+          <ZoomOut :size="16" />
+        </button>
+      </div>
     </div>
 
     <!-- ── Modelo GLB ─────────────────────────────────────────────── -->
@@ -28,7 +36,7 @@
         :class="{ 'is-filled': form.model }"
         @click="$refs.modelInput.click()"
         @dragover.prevent
-        @drop.prevent="onDrop($event, 'model')"
+        @drop.prevent="onDrop"
       >
         <Upload :size="20" />
         <span>{{ form.model ? form.model.name : 'Clique ou arraste o arquivo .glb' }}</span>
@@ -36,7 +44,7 @@
           {{ formatBytes(form.model.size) }}
         </span>
       </div>
-      <input ref="modelInput" type="file" accept=".glb" hidden @change="onFileChange($event, 'model')" />
+      <input ref="modelInput" type="file" accept=".glb" hidden @change="onFileChange" />
     </div>
 
     <!-- ── Metadados básicos ──────────────────────────────────────── -->
@@ -80,61 +88,81 @@
       </div>
     </div>
 
+    <div v-if="suggestedSize" class="p-admin__size-hint">
+      <div class="p-admin__size-hint-info">
+        <Ruler :size="14" />
+        <span>
+          Modelo: <strong>{{ suggestedSize.dimX }}×{{ suggestedSize.dimZ }} u</strong>
+          → sugestão: <strong>{{ suggestedSize.sizeX }}×{{ suggestedSize.sizeZ }} tiles</strong>
+        </span>
+        <span
+          v-if="form.sizeX !== suggestedSize.sizeX || form.sizeZ !== suggestedSize.sizeZ"
+          class="p-admin__size-mismatch"
+        >
+          <AlertTriangle :size="12" /> tiles atuais diferem da sugestão
+        </span>
+      </div>
+      <button type="button" class="c-btn c-btn--ghost c-btn--sm" @click="applySuggestion">
+        Aplicar sugestão
+      </button>
+    </div>
+
     <div class="p-admin__upload-row">
       <div class="c-field">
         <label class="c-field__label">Preço (moedas)</label>
         <input v-model.number="form.priceCoins" class="c-field__input" type="number" min="0" />
       </div>
-      <div class="c-field">
+      <div class="c-field p-admin__emoji-field" v-click-outside="() => emojiOpen = false">
         <label class="c-field__label">Ícone (emoji)</label>
-        <input v-model="form.icon" class="c-field__input" placeholder="🏠" maxlength="10" />
+        <button type="button" class="p-admin__emoji-trigger" @click="emojiOpen = !emojiOpen">
+          <span class="p-admin__emoji-current">{{ form.icon }}</span>
+          <span class="p-admin__emoji-hint">Selecionar</span>
+        </button>
+        <div v-if="emojiOpen" class="p-admin__emoji-popover">
+          <div
+            v-for="group in emojiGroups"
+            :key="group.label"
+            class="p-admin__emoji-group"
+          >
+            <span class="p-admin__emoji-group-label">{{ group.label }}</span>
+            <div class="p-admin__emoji-grid">
+              <button
+                v-for="e in group.emojis"
+                :key="e"
+                type="button"
+                :class="['p-admin__emoji-btn', { 'is-active': form.icon === e }]"
+                @click="form.icon = e; emojiOpen = false"
+              >{{ e }}</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- ── Material PBR ──────────────────────────────────────────── -->
+    <!-- ── Material PBR ──────────────────────────────────────────────── -->
     <div class="p-admin__building-section">
       <p class="p-admin__building-section-title"><Sparkles :size="14" /> Material PBR</p>
 
-      <div class="p-admin__upload-row">
-        <div class="c-field">
-          <label class="c-field__label">Roughness <span class="p-admin__val">{{ form.roughness.toFixed(2) }}</span></label>
-          <input v-model.number="form.roughness" class="p-admin__slider" type="range" min="0" max="1" step="0.01" />
-        </div>
-        <div class="c-field">
-          <label class="c-field__label">Metalness <span class="p-admin__val">{{ form.metalness.toFixed(2) }}</span></label>
-          <input v-model.number="form.metalness" class="p-admin__slider" type="range" min="0" max="1" step="0.01" />
-        </div>
-        <div class="c-field">
-          <label class="c-field__label">Scale <span class="p-admin__val">{{ form.scaleFactor.toFixed(2) }}</span></label>
-          <input v-model.number="form.scaleFactor" class="p-admin__slider" type="range" min="0.1" max="5" step="0.05" />
-        </div>
+      <div class="c-field">
+        <label class="c-field__label">Material</label>
+        <select v-model="form.materialId" class="c-field__input">
+          <option value="">— Sem material —</option>
+          <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.name }}</option>
+        </select>
+        <span v-if="!materials.length" class="c-field__hint">
+          Nenhum material disponível. Crie um na seção ao lado e clique em
+          <button type="button" class="p-admin__refresh-btn" @click="loadMaterials">↺ atualizar</button>.
+        </span>
+        <button v-else type="button" class="p-admin__refresh-btn" @click="loadMaterials">
+          ↺ atualizar lista
+        </button>
       </div>
-    </div>
 
-    <!-- ── Slots de textura ──────────────────────────────────────── -->
-    <div class="p-admin__building-section">
-      <p class="p-admin__building-section-title"><ImageIcon :size="14" /> Mapas de Textura (PBR)</p>
-      <div class="p-admin__tex-slots">
-        <div v-for="slot in texSlots" :key="slot.key" class="p-admin__tex-slot">
-          <div
-            class="p-admin__tex-drop"
-            :class="{ 'is-filled': form.textures[slot.key] }"
-            @click="$refs[`tex_${slot.key}`][0].click()"
-            @dragover.prevent
-            @drop.prevent="onDrop($event, slot.key, true)"
-          >
-            <component :is="form.textures[slot.key] ? CheckCircle : ImageIcon" :size="18" />
-            <span>{{ form.textures[slot.key] ? form.textures[slot.key].name : slot.label }}</span>
-          </div>
-          <input
-            :ref="`tex_${slot.key}`"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            hidden
-            @change="onFileChange($event, slot.key, true)"
-          />
-          <span class="p-admin__tex-desc">{{ slot.description }}</span>
-        </div>
+      <div class="c-field">
+        <label class="c-field__label">
+          Scale <span class="p-admin__val">{{ form.scaleFactor.toFixed(2) }}</span>
+        </label>
+        <input v-model.number="form.scaleFactor" class="p-admin__slider" type="range" min="0.1" max="5" step="0.05" />
       </div>
     </div>
 
@@ -158,23 +186,46 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import {
-  Box, Layers, Upload, Sparkles, ImageIcon, CheckCircle,
-  CircleCheck, CircleAlert,
+  Box, Layers, Upload, Sparkles,
+  CircleCheck, CircleAlert, ZoomIn, ZoomOut, Ruler, AlertTriangle,
 } from 'lucide-vue-next'
 import {
   WebGLRenderer, Scene, PerspectiveCamera, AmbientLight, DirectionalLight,
-  Color, MeshStandardMaterial, TextureLoader,
+  Color, MeshStandardMaterial, Box3, Vector3,
 } from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { adminCreateBuilding } from '@/core/services/admin.service.js'
+import { adminCreateBuilding, adminListMaterials } from '@/core/services/admin.service.js'
 
 const emit = defineEmits(['created'])
 
-const saving      = ref(false)
-const message     = ref('')
-const success     = ref(false)
+const saving       = ref(false)
+const message      = ref('')
+const success      = ref(false)
 const previewReady = ref(false)
 const previewCanvas = ref(null)
+const emojiOpen     = ref(false)
+const suggestedSize = ref(null)
+const materials     = ref([])
+
+// ─── Emoji picker ──────────────────────────────────────────────────────────
+
+const emojiGroups = [
+  { label: 'Residencial', emojis: ['🏠', '🏡', '🏘', '🏗', '🏚', '🛖', '⛺', '🏰', '🏯', '🗼'] },
+  { label: 'Comercial',   emojis: ['🏢', '🏬', '🏦', '🏨', '🏪', '🏫', '🏛', '⛪', '🕌', '🕍'] },
+  { label: 'Natureza',    emojis: ['🌳', '🌲', '🌴', '🌵', '🌾', '🍀', '🌻', '🌊', '⛰', '🗻'] },
+  { label: 'Estrada / Infra', emojis: ['🛣', '🛤', '🌉', '🚉', '🚏', '🛫', '⛽', '🚦', '🚧', '🗺'] },
+  { label: 'Decoração',   emojis: ['⛲', '🎪', '🎠', '🎡', '🎢', '🗽', '🗿', '🏟', '💎', '✨'] },
+]
+
+const vClickOutside = {
+  mounted(el, binding) {
+    el._clickOutsideHandler = (e) => { if (!el.contains(e.target)) binding.value(e) }
+    document.addEventListener('mousedown', el._clickOutsideHandler)
+  },
+  unmounted(el) {
+    document.removeEventListener('mousedown', el._clickOutsideHandler)
+  },
+}
 
 const form = reactive({
   name:        '',
@@ -185,29 +236,71 @@ const form = reactive({
   ccuCost:     10,
   priceCoins:  0,
   icon:        '🏠',
-  roughness:   0.7,
-  metalness:   0.0,
+  materialId:  '',
   scaleFactor: 1.0,
   model:       null,
-  textures: {
-    texAlbedo:              null,
-    texNormal:              null,
-    texRoughnessMetalness:  null,
-    texAo:                  null,
-  },
 })
 
-const texSlots = [
-  { key: 'texAlbedo',             label: 'Base Color',         description: 'Cor principal (albedo)' },
-  { key: 'texNormal',             label: 'Normal Map',          description: 'Profundidade e detalhes' },
-  { key: 'texRoughnessMetalness', label: 'Roughness/Metalness', description: 'Canal G=rugosidade, B=metal' },
-  { key: 'texAo',                 label: 'Ambient Occlusion',   description: 'Sombras de contato' },
-]
+async function loadMaterials() {
+  try {
+    materials.value = await adminListMaterials()
+  } catch (err) {
+    console.warn('Erro ao carregar materiais:', err)
+  }
+}
+
+defineExpose({ loadMaterials })
 
 // ─── Preview Three.js ──────────────────────────────────────────────────────
 
+const CELL = 1.4
+
 let renderer, scene, previewCamera, animId, currentModel
-let modelUrl = null
+let modelUrl    = null
+let _camDist    = 5
+let _zoomFactor = 1
+
+function _updateCamPosition() {
+  const d = _camDist * _zoomFactor
+  previewCamera.position.set(d * 0.6, d * 0.45, d * 0.9)
+  previewCamera.lookAt(0, 0, 0)
+}
+
+function zoomIn()  { _zoomFactor = Math.max(0.25, _zoomFactor - 0.15); _updateCamPosition() }
+function zoomOut() { _zoomFactor = Math.min(4,    _zoomFactor + 0.15); _updateCamPosition() }
+
+function _fitCameraToModel(model) {
+  model.updateMatrixWorld(true)
+
+  const box    = new Box3().setFromObject(model)
+  const center = box.getCenter(new Vector3())
+  const size   = box.getSize(new Vector3())
+
+  model.position.x -= center.x
+  model.position.y -= center.y
+  model.position.z -= center.z
+
+  const maxDim = Math.max(size.x, size.y, size.z) || 1
+  _camDist    = maxDim * 1.6
+  _zoomFactor = 1
+
+  previewCamera.far = _camDist * 20
+  previewCamera.updateProjectionMatrix()
+  _updateCamPosition()
+
+  suggestedSize.value = {
+    sizeX: Math.max(1, Math.ceil(size.x / CELL)),
+    sizeZ: Math.max(1, Math.ceil(size.z / CELL)),
+    dimX:  size.x.toFixed(2),
+    dimZ:  size.z.toFixed(2),
+  }
+}
+
+function applySuggestion() {
+  if (!suggestedSize.value) return
+  form.sizeX = suggestedSize.value.sizeX
+  form.sizeZ = suggestedSize.value.sizeZ
+}
 
 function initPreview() {
   const canvas = previewCanvas.value
@@ -220,9 +313,8 @@ function initPreview() {
   scene = new Scene()
   scene.background = new Color(0x0e1124)
 
-  previewCamera = new PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100)
-  previewCamera.position.set(3, 2, 4)
-  previewCamera.lookAt(0, 0, 0)
+  previewCamera = new PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 500)
+  _updateCamPosition()
 
   scene.add(new AmbientLight(0xffffff, 0.6))
   const sun = new DirectionalLight(0xffffff, 1.2)
@@ -242,46 +334,22 @@ function loadPreviewModel(file) {
   if (currentModel) { scene.remove(currentModel); currentModel = null }
 
   modelUrl = URL.createObjectURL(file)
-  const loader = new GLTFLoader()
-  loader.load(modelUrl, (gltf) => {
+  new GLTFLoader().load(modelUrl, (gltf) => {
     currentModel = gltf.scene
     currentModel.scale.setScalar(form.scaleFactor)
-
-    // Center model
-    const box = new (class extends Object {})()
     currentModel.traverse(n => {
       if (n.isMesh) {
-        n.material = new MeshStandardMaterial({
-          roughness: form.roughness,
-          metalness: form.metalness,
-          color: 0xc8bfe8,
-        })
+        n.material = new MeshStandardMaterial({ roughness: 0.7, metalness: 0.0, color: 0xc8bfe8 })
         n.castShadow = true
       }
     })
-
     scene.add(currentModel)
+    _fitCameraToModel(currentModel)
     previewReady.value = true
-  }, undefined, (err) => {
-    console.warn('Preview GLB load error:', err)
-  })
+  }, undefined, (err) => console.warn('Preview GLB load error:', err))
 }
 
-function applyPreviewTexture(slot, file) {
-  if (!currentModel) return
-  const objUrl  = URL.createObjectURL(file)
-  const texture = new TextureLoader().load(objUrl)
-  currentModel.traverse(n => {
-    if (!n.isMesh) return
-    if (slot === 'texAlbedo')             { n.material.map          = texture }
-    if (slot === 'texNormal')             { n.material.normalMap    = texture }
-    if (slot === 'texRoughnessMetalness') { n.material.roughnessMap = texture; n.material.metalnessMap = texture }
-    if (slot === 'texAo')                 { n.material.aoMap        = texture }
-    n.material.needsUpdate = true
-  })
-}
-
-onMounted(initPreview)
+onMounted(() => { initPreview(); loadMaterials() })
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(animId)
@@ -295,28 +363,18 @@ watch(() => form.scaleFactor, (v) => {
 
 // ─── Handlers de arquivo ──────────────────────────────────────────────────
 
-function onFileChange(event, key, isTexture = false) {
+function onFileChange(event) {
   const file = event.target.files[0]
   if (!file) return
-  if (isTexture) {
-    form.textures[key] = file
-    applyPreviewTexture(key, file)
-  } else {
-    form.model = file
-    loadPreviewModel(file)
-  }
+  form.model = file
+  loadPreviewModel(file)
 }
 
-function onDrop(event, key, isTexture = false) {
+function onDrop(event) {
   const file = event.dataTransfer.files[0]
   if (!file) return
-  if (isTexture) {
-    form.textures[key] = file
-    applyPreviewTexture(key, file)
-  } else {
-    form.model = file
-    loadPreviewModel(file)
-  }
+  form.model = file
+  loadPreviewModel(file)
 }
 
 function formatBytes(bytes) {
@@ -335,12 +393,8 @@ async function save() {
   try {
     const fd = new FormData()
     fd.append('model', form.model)
-    if (form.textures.texAlbedo)             fd.append('texAlbedo',             form.textures.texAlbedo)
-    if (form.textures.texNormal)             fd.append('texNormal',             form.textures.texNormal)
-    if (form.textures.texRoughnessMetalness) fd.append('texRoughnessMetalness', form.textures.texRoughnessMetalness)
-    if (form.textures.texAo)                 fd.append('texAo',                 form.textures.texAo)
 
-    const params = {
+    const item = await adminCreateBuilding(fd, {
       name:        form.name,
       category:    form.category,
       placement:   form.placement,
@@ -349,31 +403,24 @@ async function save() {
       ccuCost:     form.ccuCost,
       priceCoins:  form.priceCoins,
       icon:        form.icon,
-      roughness:   form.roughness,
-      metalness:   form.metalness,
+      materialId:  form.materialId || undefined,
       scaleFactor: form.scaleFactor,
-    }
+    })
 
-    const item = await adminCreateBuilding(fd, params)
     success.value = true
     message.value = `Edifício "${item.name}" publicado!`
     emit('created', item)
 
-    // Reset
     form.name        = ''
     form.sizeX       = 1
     form.sizeZ       = 1
     form.ccuCost     = 10
     form.priceCoins  = 0
-    form.roughness   = 0.7
-    form.metalness   = 0.0
+    form.materialId  = ''
     form.scaleFactor = 1.0
     form.model       = null
-    form.textures.texAlbedo             = null
-    form.textures.texNormal             = null
-    form.textures.texRoughnessMetalness = null
-    form.textures.texAo                 = null
-    previewReady.value = false
+    previewReady.value  = false
+    suggestedSize.value = null
   } catch (err) {
     success.value = false
     const msg = err.response?.data?.message
@@ -397,7 +444,7 @@ async function save() {
 
 .p-admin__building-preview {
   position: relative;
-  height: 200px;
+  height: 340px;
   border-radius: $radius-lg;
   border: 1px solid var(--glass-border);
   overflow: hidden;
@@ -433,7 +480,66 @@ async function save() {
   letter-spacing: 0.06em;
 }
 
-// ── Drop zones ────────────────────────────────────────────────────────────────
+.p-admin__zoom-controls {
+  position: absolute;
+  bottom: $space-3;
+  right: $space-3;
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+.p-admin__zoom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: $radius-md;
+  border: 1px solid var(--glass-border);
+  background: rgba(14, 17, 36, 0.75);
+  backdrop-filter: blur(6px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all $dur-fast;
+
+  &:hover { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+}
+
+// ── Size hint ─────────────────────────────────────────────────────────────────
+
+.p-admin__size-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-3;
+  padding: $space-2 $space-3;
+  border-radius: $radius-md;
+  background: rgba(0, 217, 192, 0.07);
+  border: 1px solid rgba(0, 217, 192, 0.25);
+  font-size: $fs-sm;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.p-admin__size-hint-info {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  flex-wrap: wrap;
+
+  strong { color: var(--color-secondary); }
+}
+
+.p-admin__size-mismatch {
+  display: flex;
+  align-items: center;
+  gap: $space-1;
+  font-size: $fs-xs;
+  color: #ffb347;
+}
+
+// ── Drop zone ─────────────────────────────────────────────────────────────────
 
 .p-admin__drop-zone {
   display: flex;
@@ -458,7 +564,7 @@ async function save() {
   color: var(--text-subtle);
 }
 
-// ── Seções ────────────────────────────────────────────────────────────────────
+// ── Section ───────────────────────────────────────────────────────────────────
 
 .p-admin__building-section {
   display: flex;
@@ -480,7 +586,7 @@ async function save() {
   margin: 0;
 }
 
-// ── Sliders ───────────────────────────────────────────────────────────────────
+// ── Slider ────────────────────────────────────────────────────────────────────
 
 .p-admin__slider {
   width: 100%;
@@ -496,46 +602,17 @@ async function save() {
   margin-left: $space-1;
 }
 
-// ── Texture slots ─────────────────────────────────────────────────────────────
+// ── Refresh btn ───────────────────────────────────────────────────────────────
 
-.p-admin__tex-slots {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: $space-2;
-}
-
-.p-admin__tex-slot {
-  display: flex;
-  flex-direction: column;
-  gap: $space-1;
-}
-
-.p-admin__tex-drop {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: $space-1;
-  padding: $space-3;
-  border: 1px dashed var(--border-subtle);
-  border-radius: $radius-md;
-  cursor: pointer;
+.p-admin__refresh-btn {
+  background: none;
+  border: none;
+  padding: 0;
   font-size: $fs-xs;
-  color: var(--text-muted);
-  text-align: center;
-  min-height: 72px;
-  transition: all $dur-fast;
-  background: var(--bg-base);
-  word-break: break-all;
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
 
-  &:hover { border-color: var(--color-primary); color: var(--text-secondary); }
-  &.is-filled { border-color: var(--color-secondary); color: var(--text-primary); background: var(--bg-surface); }
-}
-
-.p-admin__tex-desc {
-  font-size: 0.62rem;
-  color: var(--text-subtle);
-  text-align: center;
-  line-height: 1.3;
+  &:hover { color: var(--color-secondary); }
 }
 </style>

@@ -6,6 +6,7 @@ import { MarketplaceItem }            from './entities/marketplace-item.entity';
 import { MarketplaceSeason }          from './entities/marketplace-season.entity';
 import { UserInventory }              from './entities/user-inventory.entity';
 import { UserProfileCustomization }   from './entities/user-profile-customization.entity';
+import { RedemptionToken }            from './entities/redemption-token.entity';
 import type { ItemType }              from './entities/marketplace-item.entity';
 
 @Injectable()
@@ -22,6 +23,9 @@ export class MarketplaceRepository {
 
     @InjectRepository(UserProfileCustomization)
     private readonly profileRepo: Repository<UserProfileCustomization>,
+
+    @InjectRepository(RedemptionToken)
+    private readonly tokenRepo: Repository<RedemptionToken>,
   ) {}
 
   // ─── Items ─────────────────────────────────────────────────────────────────
@@ -113,5 +117,70 @@ export class MarketplaceRepository {
 
   findProfile(userId: string): Promise<UserProfileCustomization | null> {
     return this.profileRepo.findOne({ where: { userId } });
+  }
+
+  // ─── Vault ─────────────────────────────────────────────────────────────────
+
+  findAllItems(): Promise<MarketplaceItem[]> {
+    return this.itemRepo.find({ order: { isVault: 'ASC', rarity: 'ASC', priceCoins: 'ASC' } });
+  }
+
+  findItemByIdAdmin(id: string): Promise<MarketplaceItem | null> {
+    return this.itemRepo.findOne({ where: { id } });
+  }
+
+  async toggleVault(id: string): Promise<MarketplaceItem> {
+    const item = await this.itemRepo.findOneOrFail({ where: { id } });
+    item.isVault   = item.isVault   ? 0 : 1;
+    item.isActive  = item.isVault   ? 0 : item.isActive; // vault → oculto
+    return this.itemRepo.save(item);
+  }
+
+  // ─── Redemption Tokens ─────────────────────────────────────────────────────
+
+  /** Gera código único de 10 chars uppercase alfanumérico */
+  private generateCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 10; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  }
+
+  async createToken(
+    itemId: string,
+    maxUses: number,
+    expiresAt: Date | null,
+    createdBy: string,
+  ): Promise<RedemptionToken> {
+    let code: string;
+    let tries = 0;
+    // garante unicidade em caso raro de colisão
+    do {
+      code = this.generateCode();
+      tries++;
+    } while (tries < 10 && await this.tokenRepo.count({ where: { code } }) > 0);
+
+    const token = this.tokenRepo.create({ code, itemId, maxUses, expiresAt, createdBy });
+    return this.tokenRepo.save(token);
+  }
+
+  listTokens(itemId?: string): Promise<RedemptionToken[]> {
+    const where: any = {};
+    if (itemId) where.itemId = itemId;
+    return this.tokenRepo.find({
+      where,
+      relations: ['item'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  findTokenByCode(code: string): Promise<RedemptionToken | null> {
+    return this.tokenRepo.findOne({ where: { code: code.toUpperCase() }, relations: ['item'] });
+  }
+
+  async incrementTokenUse(id: string): Promise<void> {
+    await this.tokenRepo.increment({ id }, 'currentUses', 1);
   }
 }

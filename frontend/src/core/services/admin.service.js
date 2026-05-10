@@ -45,3 +45,16 @@ export async function adminToggleBuilding(id, active) {
   const { data } = await api.patch(`/admin/buildings/${id}/toggle`, { active })
   return data
 }
+
+export async function adminCreateMaterial(formData, queryParams) {
+  const { data } = await api.post('/admin/materials', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: queryParams,
+  })
+  return data
+}
+
+export async function adminListMaterials() {
+  const { data } = await api.get('/admin/materials')
+  return data
+}

@@ -28,11 +28,8 @@ export class CreateBuildingDto {
   @IsOptional() @IsString() @MaxLength(10)
   icon?: string;
 
-  @IsOptional() @Type(() => Number) @IsNumber()
-  roughness?: number;
-
-  @IsOptional() @Type(() => Number) @IsNumber()
-  metalness?: number;
+  @IsOptional() @IsString()
+  materialId?: string;
 
   @IsOptional() @Type(() => Number) @IsNumber()
   scaleFactor?: number;

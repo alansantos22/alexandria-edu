@@ -130,13 +130,13 @@ export class CityRepository {
   async findPalette(): Promise<CityPaletteItem[]> {
     return this.paletteRepo.find({
       where: { isActive: true as any },
-      relations: ['buildingAsset'],
+      relations: ['buildingAsset', 'buildingAsset.material'],
       order: { category: 'ASC', sortOrder: 'ASC' },
     });
   }
 
   async findPaletteItem(id: string): Promise<CityPaletteItem | null> {
-    return this.paletteRepo.findOne({ where: { id, isActive: true as any }, relations: ['buildingAsset'] });
+    return this.paletteRepo.findOne({ where: { id, isActive: true as any }, relations: ['buildingAsset', 'buildingAsset.material'] });
   }
 
   // ── Buildings ─────────────────────────────────────────────
@@ -144,13 +144,13 @@ export class CityRepository {
   async findBuildings(userId: string): Promise<CityBuilding[]> {
     return this.buildingRepo.find({
       where: { cityUserId: userId },
-      relations: ['paletteItem', 'paletteItem.buildingAsset'],
+      relations: ['paletteItem', 'paletteItem.buildingAsset', 'paletteItem.buildingAsset.material'],
       order: { placedAt: 'ASC' },
     });
   }
 
   async findBuilding(id: string, userId: string): Promise<CityBuilding | null> {
-    return this.buildingRepo.findOne({ where: { id, cityUserId: userId }, relations: ['paletteItem', 'paletteItem.buildingAsset'] });
+    return this.buildingRepo.findOne({ where: { id, cityUserId: userId }, relations: ['paletteItem', 'paletteItem.buildingAsset', 'paletteItem.buildingAsset.material'] });
   }
 
   async createBuilding(

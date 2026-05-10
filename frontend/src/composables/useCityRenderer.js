@@ -459,30 +459,34 @@ export function useCityRenderer(canvasRef) {
   }
 
   function _addGLBMesh(building) {
-    const item  = building.paletteItem
-    const asset = item.buildingAsset
-    const loader = new GLTFLoader()
+    const item     = building.paletteItem
+    const asset    = item.buildingAsset
+    const mtl      = asset?.material      // CityMaterial (may be null)
+    const loader    = new GLTFLoader()
     const texLoader = new TextureLoader()
 
     loader.load(item.modelUrl, (gltf) => {
       const root = gltf.scene
-      const s = asset?.scaleFactor ?? 1
-      root.scale.setScalar(s)
+      root.scale.setScalar(asset?.scaleFactor ?? 1)
 
       root.traverse((node) => {
         if (!node.isMesh) return
         const mat = new MeshStandardMaterial({
-          roughness: asset?.roughness ?? 0.7,
-          metalness: asset?.metalness ?? 0.0,
+          roughness: mtl?.roughness ?? 0.7,
+          metalness: mtl?.metalness ?? 0.0,
         })
-        if (asset?.textureAlbedo)             { mat.map          = texLoader.load(asset.textureAlbedo) }
-        if (asset?.textureNormal)             { mat.normalMap    = texLoader.load(asset.textureNormal) }
-        if (asset?.textureRoughnessMetalness) {
-          const rm = texLoader.load(asset.textureRoughnessMetalness)
+        if (mtl?.textureAlbedo)             { mat.map          = texLoader.load(mtl.textureAlbedo) }
+        if (mtl?.textureNormal)             { mat.normalMap    = texLoader.load(mtl.textureNormal) }
+        if (mtl?.textureRoughnessMetalness) {
+          const rm = texLoader.load(mtl.textureRoughnessMetalness)
           mat.roughnessMap = rm
           mat.metalnessMap = rm
         }
-        if (asset?.textureAo) { mat.aoMap = texLoader.load(asset.textureAo) }
+        if (mtl?.textureAo) { mat.aoMap = texLoader.load(mtl.textureAo) }
+        if (mtl?.textureEmissive) {
+          mat.emissiveMap = texLoader.load(mtl.textureEmissive)
+          mat.emissive.set(0xffffff)
+        }
         node.material = mat
         node.castShadow = node.receiveShadow = true
       })

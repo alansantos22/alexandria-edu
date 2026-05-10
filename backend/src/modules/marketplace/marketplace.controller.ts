@@ -10,6 +10,7 @@ import { CurrentUser }        from '../../common/decorators/current-user.decorat
 import { AuthenticatedUser }  from '../../shared/interfaces/jwt-payload.interface';
 import { MarketplaceService } from './marketplace.service';
 import { EquipItemDto }       from './dto/equip-item.dto';
+import { RedeemTokenDto }     from './dto/vault.dto';
 
 @Controller('marketplace')
 export class MarketplaceController {
@@ -49,5 +50,14 @@ export class MarketplaceController {
   @Get('profile/:userId')
   getPublicProfile(@Param('userId') userId: string) {
     return this.marketplaceService.getPublicProfile(userId);
+  }
+
+  /** Resgata um token de vault — adiciona item ao inventário sem custo */
+  @Post('redeem')
+  redeemToken(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RedeemTokenDto,
+  ) {
+    return this.marketplaceService.redeemToken(user.id, dto.code);
   }
 }

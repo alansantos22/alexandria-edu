@@ -12,9 +12,12 @@ import { randomUUID }       from 'crypto';
 import { MarketplaceItem }     from '../marketplace/entities/marketplace-item.entity';
 import { CityPaletteItem }     from '../city/entities/city-palette-item.entity';
 import { BuildingAsset }       from '../city/entities/building-asset.entity';
+import { CityMaterial }        from '../city/entities/city-material.entity';
 import { CreateBackgroundDto } from './dto/create-background.dto';
 import { CreatePaletteDto }    from './dto/create-palette.dto';
 import { CreateBuildingDto }   from './dto/create-building.dto';
+
+type FileMap = Record<string, { filename: string; mimetype: string; buffer: Buffer }>;
 
 @Injectable()
 export class AdminService {
@@ -29,6 +32,8 @@ export class AdminService {
     private readonly paletteItemRepo: Repository<CityPaletteItem>,
     @InjectRepository(BuildingAsset)
     private readonly buildingAssetRepo: Repository<BuildingAsset>,
+    @InjectRepository(CityMaterial)
+    private readonly materialRepo: Repository<CityMaterial>,
   ) {}
 
   // ─── Background upload ──────────────────────────────────────────────────────
@@ -41,11 +46,9 @@ export class AdminService {
     if (!allowed.includes(file.mimetype)) {
       throw new BadRequestException('Formato não permitido. Use JPG, PNG ou WEBP.');
     }
-
     if (file.buffer.byteLength > 5 * 1024 * 1024) {
       throw new BadRequestException('Imagem excede o limite de 5 MB.');
     }
-
     if (isNaN(dto.priceCoins) || dto.priceCoins < 0) {
       throw new BadRequestException('priceCoins deve ser um número válido e não-negativo.');
     }
@@ -55,10 +58,8 @@ export class AdminService {
     const ext      = file.mimetype === 'image/webp' ? 'webp'
                    : file.mimetype === 'image/png'  ? 'png' : 'jpg';
     const filename = `bg_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const dest     = path.join(this.uploadsDir, filename);
-
-    fs.writeFileSync(dest, file.buffer);
-    this.logger.log(`Background salvo: ${dest}`);
+    fs.writeFileSync(path.join(this.uploadsDir, filename), file.buffer);
+    this.logger.log(`Background salvo: ${filename}`);
 
     const item = this.itemRepo.create({
       name:        dto.name,
@@ -69,7 +70,6 @@ export class AdminService {
       rarity:      dto.rarity,
       isActive:    1,
     });
-
     return this.itemRepo.save(item);
   }
 
@@ -77,66 +77,39 @@ export class AdminService {
 
   async createPalette(dto: CreatePaletteDto): Promise<MarketplaceItem> {
     const paletteData = {
-      primary:       dto.primary,
-      primaryDark:   dto.primaryDark,
-      secondary:     dto.secondary,
-      secondaryDark: dto.secondaryDark,
-      tertiary:      dto.tertiary,
+      primary: dto.primary, primaryDark: dto.primaryDark,
+      secondary: dto.secondary, secondaryDark: dto.secondaryDark,
+      tertiary: dto.tertiary,
     };
-
-    const imageUrl = `palette:${JSON.stringify(paletteData)}`;
-
     const item = this.itemRepo.create({
-      name:        dto.name,
-      description: dto.description ?? null,
-      type:        'palette',
-      imageUrl,
-      priceCoins:  dto.priceCoins,
-      rarity:      dto.rarity,
-      isActive:    1,
+      name: dto.name, description: dto.description ?? null,
+      type: 'palette', imageUrl: `palette:${JSON.stringify(paletteData)}`,
+      priceCoins: dto.priceCoins, rarity: dto.rarity, isActive: 1,
     });
-
     return this.itemRepo.save(item);
   }
 
-  // ─── Criar frame CSS ────────────────────────────────────────────────────────
+  // ─── Frame CSS ──────────────────────────────────────────────────────────────
 
   async createFramePreset(dto: {
-    name: string;
-    description?: string;
+    name: string; description?: string;
     rarity: 'common' | 'rare' | 'epic' | 'legendary';
-    priceCoins: number;
-    presetKey: string;
+    priceCoins: number; presetKey: string;
   }): Promise<MarketplaceItem> {
     const item = this.itemRepo.create({
-      name:        dto.name,
-      description: dto.description ?? null,
-      type:        'frame',
-      imageUrl:    `frame:${dto.presetKey}`,
-      priceCoins:  dto.priceCoins,
-      rarity:      dto.rarity,
-      isActive:    1,
+      name: dto.name, description: dto.description ?? null,
+      type: 'frame', imageUrl: `frame:${dto.presetKey}`,
+      priceCoins: dto.priceCoins, rarity: dto.rarity, isActive: 1,
     });
-
     return this.itemRepo.save(item);
   }
 
-  // ─── Criar building 3D ─────────────────────────────────────────────────────
+  // ─── Material 3D ───────────────────────────────────────────────────────────
 
-  async createBuilding(
-    files: Record<string, { filename: string; mimetype: string; buffer: Buffer }>,
-    dto: CreateBuildingDto,
-  ): Promise<CityPaletteItem> {
-    const modelFile = files['model'];
-    if (!modelFile) throw new BadRequestException('Arquivo model (GLB) é obrigatório.');
-
-    const modelsDir = path.resolve(process.cwd(), 'uploads', 'models');
-    fs.mkdirSync(modelsDir, { recursive: true });
-
-    const modelFilename = `model_${Date.now()}_${Math.random().toString(36).slice(2)}.glb`;
-    fs.writeFileSync(path.join(modelsDir, modelFilename), modelFile.buffer);
-    this.logger.log(`Modelo GLB salvo: ${modelFilename}`);
-
+  async createMaterial(
+    files: FileMap,
+    dto: { name: string; roughness?: number; metalness?: number },
+  ): Promise<CityMaterial> {
     const texturesDir = path.resolve(process.cwd(), 'uploads', 'textures');
     fs.mkdirSync(texturesDir, { recursive: true });
 
@@ -148,6 +121,40 @@ export class AdminService {
       fs.writeFileSync(path.join(texturesDir, fn), f.buffer);
       return `/uploads/textures/${fn}`;
     };
+
+    const material = this.materialRepo.create({
+      id:                         randomUUID(),
+      name:                       dto.name,
+      textureAlbedo:              saveTexture('texAlbedo'),
+      textureNormal:              saveTexture('texNormal'),
+      textureRoughnessMetalness:  saveTexture('texRoughnessMetalness'),
+      textureAo:                  saveTexture('texAo'),
+      textureEmissive:            saveTexture('texEmissive'),
+      roughness:                  dto.roughness ?? 0.7,
+      metalness:                  dto.metalness ?? 0.0,
+    });
+    return this.materialRepo.save(material);
+  }
+
+  listMaterials(): Promise<CityMaterial[]> {
+    return this.materialRepo.find({ order: { createdAt: 'DESC' } });
+  }
+
+  // ─── Building 3D ───────────────────────────────────────────────────────────
+
+  async createBuilding(
+    files: FileMap,
+    dto: CreateBuildingDto,
+  ): Promise<CityPaletteItem> {
+    const modelFile = files['model'];
+    if (!modelFile) throw new BadRequestException('Arquivo model (GLB) é obrigatório.');
+
+    const modelsDir = path.resolve(process.cwd(), 'uploads', 'models');
+    fs.mkdirSync(modelsDir, { recursive: true });
+
+    const modelFilename = `model_${Date.now()}_${Math.random().toString(36).slice(2)}.glb`;
+    fs.writeFileSync(path.join(modelsDir, modelFilename), modelFile.buffer);
+    this.logger.log(`Modelo GLB salvo: ${modelFilename}`);
 
     const id = randomUUID();
 
@@ -167,34 +174,27 @@ export class AdminService {
     await this.paletteItemRepo.save(paletteItem);
 
     const asset = this.buildingAssetRepo.create({
-      paletteItemId:              id,
-      textureAlbedo:              saveTexture('texAlbedo'),
-      textureNormal:              saveTexture('texNormal'),
-      textureRoughnessMetalness:  saveTexture('texRoughnessMetalness'),
-      textureAo:                  saveTexture('texAo'),
-      roughness:                  dto.roughness   ?? 0.7,
-      metalness:                  dto.metalness   ?? 0.0,
-      scaleFactor:                dto.scaleFactor ?? 1.0,
+      paletteItemId: id,
+      materialId:    dto.materialId ?? null,
+      scaleFactor:   dto.scaleFactor ?? 1.0,
     });
     await this.buildingAssetRepo.save(asset);
 
-    return this.paletteItemRepo.findOne({ where: { id }, relations: ['buildingAsset'] });
-  }
-
-  // ─── Listar todos os itens (admin) ──────────────────────────────────────────
-
-  listAll(): Promise<MarketplaceItem[]> {
-    return this.itemRepo.find({ order: { createdAt: 'DESC' } });
+    return this.paletteItemRepo.findOne({ where: { id }, relations: ['buildingAsset', 'buildingAsset.material'] });
   }
 
   listBuildings(): Promise<CityPaletteItem[]> {
     return this.paletteItemRepo.find({
-      relations: ['buildingAsset'],
+      relations: ['buildingAsset', 'buildingAsset.material'],
       order: { createdAt: 'DESC' },
     });
   }
 
-  // ─── Ativar/desativar item ──────────────────────────────────────────────────
+  // ─── Marketplace list / toggle ──────────────────────────────────────────────
+
+  listAll(): Promise<MarketplaceItem[]> {
+    return this.itemRepo.find({ order: { createdAt: 'DESC' } });
+  }
 
   async toggleItem(id: string, active: boolean): Promise<MarketplaceItem> {
     await this.itemRepo.update(id, { isActive: active ? 1 : 0 });
@@ -203,6 +203,6 @@ export class AdminService {
 
   async toggleBuilding(id: string, active: boolean): Promise<CityPaletteItem> {
     await this.paletteItemRepo.update(id, { isActive: active as any });
-    return this.paletteItemRepo.findOneOrFail({ where: { id }, relations: ['buildingAsset'] });
+    return this.paletteItemRepo.findOneOrFail({ where: { id }, relations: ['buildingAsset', 'buildingAsset.material'] });
   }
 }

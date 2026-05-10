@@ -10,6 +10,7 @@ import { MarketplaceItem }       from './entities/marketplace-item.entity';
 import { MarketplaceSeason }     from './entities/marketplace-season.entity';
 import { UserInventory }         from './entities/user-inventory.entity';
 import { UserProfileCustomization } from './entities/user-profile-customization.entity';
+import { RedemptionToken }       from './entities/redemption-token.entity';
 import type { ItemType }         from './entities/marketplace-item.entity';
 
 export interface ItemWithOwnership extends MarketplaceItem {
@@ -149,5 +150,62 @@ export class MarketplaceService {
     );
 
     return { profile, equippedItems };
+  }
+
+  // ─── Vault (admin) ─────────────────────────────────────────────────────────
+
+  listAllItems(): Promise<MarketplaceItem[]> {
+    return this.marketplaceRepo.findAllItems();
+  }
+
+  async toggleVault(itemId: string): Promise<MarketplaceItem> {
+    const item = await this.marketplaceRepo.findItemByIdAdmin(itemId);
+    if (!item) throw new NotFoundException('Item não encontrado.');
+    return this.marketplaceRepo.toggleVault(itemId);
+  }
+
+  // ─── Redemption Tokens ─────────────────────────────────────────────────────
+
+  async generateToken(
+    itemId: string,
+    maxUses: number,
+    expiresAt: Date | null,
+    createdBy: string,
+  ): Promise<RedemptionToken> {
+    const item = await this.marketplaceRepo.findItemByIdAdmin(itemId);
+    if (!item) throw new NotFoundException('Item não encontrado.');
+    return this.marketplaceRepo.createToken(itemId, maxUses, expiresAt, createdBy);
+  }
+
+  listTokens(itemId?: string): Promise<RedemptionToken[]> {
+    return this.marketplaceRepo.listTokens(itemId);
+  }
+
+  /** Usuário resgata um token → item adicionado ao inventário */
+  async redeemToken(
+    userId: string,
+    code: string,
+  ): Promise<{ item: MarketplaceItem; message: string }> {
+    const token = await this.marketplaceRepo.findTokenByCode(code);
+    if (!token) throw new NotFoundException('Código inválido.');
+
+    if (token.currentUses >= token.maxUses) {
+      throw new BadRequestException('Este código já atingiu o limite máximo de usos.');
+    }
+
+    if (token.expiresAt && token.expiresAt < new Date()) {
+      throw new BadRequestException('Este código de resgate expirou.');
+    }
+
+    const alreadyOwns = await this.marketplaceRepo.userOwnsItem(userId, token.itemId);
+    if (alreadyOwns) throw new BadRequestException('Você já possui este item.');
+
+    await Promise.all([
+      this.marketplaceRepo.addToInventory(userId, token.itemId),
+      this.marketplaceRepo.incrementTokenUse(token.id),
+    ]);
+
+    this.logger.log(`User ${userId} redeemed token ${token.code} → item ${token.itemId}`);
+    return { item: token.item, message: 'Item resgatado com sucesso!' };
   }
 }

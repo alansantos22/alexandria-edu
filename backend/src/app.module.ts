@@ -22,6 +22,7 @@ import { ProfileModule }      from './modules/profile/profile.module';
 import { LandModule }         from './modules/land/land.module';
 import { AdminModule }        from './modules/admin/admin.module';
 import { ContentModule }      from './modules/content/content.module';
+import { VoucherModule }      from './modules/vouchers/voucher.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -49,6 +50,7 @@ import { HealthController } from './common/health/health.controller';
     LandModule,
     AdminModule,
     ContentModule,
+    VoucherModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -41,6 +41,10 @@ export class MarketplaceItem {
   @Column({ name: 'is_active', type: 'tinyint', default: 1 })
   isActive: number;
 
+  /** 1 = item de vault (oculto no marketplace, desbloqueável apenas via token) */
+  @Column({ name: 'is_vault', type: 'tinyint', default: 0 })
+  isVault: number;
+
   @Column({ name: 'season_id', type: 'varchar', length: 36, nullable: true })
   seasonId: string | null;
 
