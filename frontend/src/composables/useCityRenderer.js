@@ -35,11 +35,13 @@ const CATEGORY_COLORS = {
   nature:      0x2ecc71,
   road:        0x636e72,
   decoration:  0xff6b9d,
+  monuments:   0xffd700,
 }
 
 function _categoryHeight(item) {
   if (item.category === 'nature')     return 0.3 * Math.max(item.sizeX, item.sizeZ)
   if (item.category === 'decoration') return 0.5
+  if (item.category === 'monuments')  return 2.5
   if (item.category === 'road')       return 0.05
   return Math.max(item.sizeX, item.sizeZ) * 0.9
 }
@@ -334,6 +336,7 @@ export function useCityRenderer(canvasRef) {
 
   function enterBuildMode(buildings) {
     buildMode = true
+    _createBuildGrid()
 
     // Load placed buildings into scene (skip already loaded)
     for (const b of buildings) {
@@ -343,12 +346,41 @@ export function useCityRenderer(canvasRef) {
     }
   }
 
+  function _createBuildGrid() {
+    if (buildGrid) return
+
+    // Grid lines (horizontal lines parallel to Z axis)
+    const extent = GRID_EXTENT * CELL
+    const pts = []
+    const gridSpacing = CELL // one grid line per cell
+    const lineOpacity = 0.3
+
+    // Lines along X direction
+    for (let i = 0; i <= GRID_EXTENT; i++) {
+      const pos = i * gridSpacing
+      pts.push(0, 0.01, pos, extent, 0.01, pos)
+    }
+
+    // Lines along Z direction
+    for (let i = 0; i <= GRID_EXTENT; i++) {
+      const pos = i * gridSpacing
+      pts.push(pos, 0.01, 0, pos, 0.01, extent)
+    }
+
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new Float32BufferAttribute(new Float32Array(pts), 3))
+
+    const mat = new LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: lineOpacity })
+    buildGrid = new LineSegments(geo, mat)
+    scene.add(buildGrid)
+  }
+
   // ── Owned tile visualization ───────────────────────────────────────
 
   function setOwnedTiles(tiles) {
     _clearTileVisualization()
     ownedTileSet = new Set(tiles.map(t => `${t.tileX},${t.tileZ}`))
-    // No tile floor overlay — only the set is maintained for placement validation
+    _buildTileVisualization(tiles)
   }
 
   function _buildTileVisualization(tiles) {
@@ -415,11 +447,20 @@ export function useCityRenderer(canvasRef) {
 
   function exitBuildMode() {
     buildMode = false
+    _clearBuildGrid()
     _clearTileVisualization()
     _clearGhostMesh()
     // Placed building meshes are kept alive — they persist in explore mode
     _buildHoverCb = null
     _buildClickCb = null
+  }
+
+  function _clearBuildGrid() {
+    if (!buildGrid) return
+    scene.remove(buildGrid)
+    buildGrid.geometry.dispose()
+    buildGrid.material.dispose()
+    buildGrid = null
   }
 
   function setBuildCallbacks(onHover, onClick) {

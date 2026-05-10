@@ -11,9 +11,9 @@ export class CityPaletteItem {
 
   @Column({
     type: 'enum',
-    enum: ['residential', 'commercial', 'nature', 'road', 'decoration'],
+    enum: ['residential', 'commercial', 'nature', 'road', 'decoration', 'monuments'],
   })
-  category: 'residential' | 'commercial' | 'nature' | 'road' | 'decoration';
+  category: 'residential' | 'commercial' | 'nature' | 'road' | 'decoration' | 'monuments';
 
   @Column({ type: 'enum', enum: ['grid', 'free'] })
   placement: 'grid' | 'free';

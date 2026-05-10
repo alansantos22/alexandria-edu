@@ -7,8 +7,8 @@ export class CreateBuildingDto {
   @IsString() @MaxLength(120)
   name: string;
 
-  @IsEnum(['residential', 'commercial', 'nature', 'road', 'decoration'])
-  category: 'residential' | 'commercial' | 'nature' | 'road' | 'decoration';
+  @IsEnum(['residential', 'commercial', 'nature', 'road', 'decoration', 'monuments'])
+  category: 'residential' | 'commercial' | 'nature' | 'road' | 'decoration' | 'monuments';
 
   @IsEnum(['grid', 'free'])
   placement: 'grid' | 'free';

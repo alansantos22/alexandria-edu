@@ -7,6 +7,7 @@ export const BUILD_CATEGORIES = [
   { id: 'nature',      icon: '🌳', label: 'Natureza' },
   { id: 'road',        icon: '🛣️',  label: 'Estradas' },
   { id: 'decoration',  icon: '🎭', label: 'Decoração' },
+  { id: 'monuments',   icon: '🗿', label: 'Monumentos' },
 ]
 
 /**
@@ -77,10 +78,15 @@ export function useBuildMode(renderer) {
     loading.value = true
     try {
       const userId = cityMeta?.userId
+      // When visiting another user's city, fetch their land. Otherwise fetch current user's land.
+      const landPromise = userId 
+        ? cityService.getLandOwned(userId) 
+        : cityService.getLandOwned('me')
+      
       const [paletteData, buildingsData, ownedLand] = await Promise.all([
         cityService.getMyPalette(),
         cityService.getBuildings(),
-        userId ? cityService.getLandOwned(userId) : Promise.resolve([]),
+        landPromise,
       ])
       // Only show buildings that have a 3D model (buildingAsset) associated
       // Also filter paid items where the user has no copies left

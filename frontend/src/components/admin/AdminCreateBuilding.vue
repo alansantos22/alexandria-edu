@@ -65,6 +65,7 @@
           <option value="nature">Natureza</option>
           <option value="road">Estrada</option>
           <option value="decoration">Decoração</option>
+          <option value="monuments">Monumentos</option>
         </select>
       </div>
       <div class="c-field">
@@ -367,6 +368,7 @@ const emojiGroups = [
   { label: 'Natureza',    emojis: ['🌳', '🌲', '🌴', '🌵', '🌾', '🍀', '🌻', '🌊', '⛰', '🗻'] },
   { label: 'Estrada / Infra', emojis: ['🛣', '🛤', '🌉', '🚉', '🚏', '🛫', '⛽', '🚦', '🚧', '🗺'] },
   { label: 'Decoração',   emojis: ['⛲', '🎪', '🎠', '🎡', '🎢', '🗽', '🗿', '🏟', '💎', '✨'] },
+  { label: 'Monumentos',  emojis: ['🗿', '🕯', '🏛', '⛩', '🕌', '⛪', '🏰', '🗼', '🗽', '📿'] },
 ]
 
 const vClickOutside = {

@@ -44,7 +44,7 @@
         </div>
         <div class="v-city__hud-row">
           <span class="v-city__hud-label">Construções</span>
-          <span class="v-city__hud-value">{{ meta?.totalBuildings ?? 0 }}</span>
+          <span class="v-city__hud-value">{{ totalBuildingCount }}</span>
         </div>
         <div class="v-city__hud-row v-city__hud-row--seed">
           <span class="v-city__hud-label">Seed</span>
@@ -166,6 +166,7 @@ const state     = ref('loading')   // loading | ready | empty | error
 const errorMsg  = ref('')
 const meta      = ref(null)
 const vehicles  = ref([])
+const loadedBuildings = ref([])   // Track placed buildings locally
 
 const route      = useRoute()
 const isVisiting = computed(() => !!route.params.userId)
@@ -175,6 +176,8 @@ const canBuild   = computed(() => !isVisiting.value)
 const displayName = computed(() =>
   isVisiting.value ? (meta.value?.username ?? route.params.userId) : (user.value?.username ?? '—'),
 )
+
+const totalBuildingCount = computed(() => loadedBuildings.value.length)
 
 const activeVehicle = computed(() => vehicles.value.find(v => v.isActive) ?? vehicles.value[0] ?? null)
 
@@ -218,6 +221,7 @@ async function loadCity() {
 
     meta.value     = cityData.meta
     vehicles.value = vehicleData
+    loadedBuildings.value = buildingsData
 
     renderChunks(cityData.chunks)
 
