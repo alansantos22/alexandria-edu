@@ -115,6 +115,7 @@ export function useWorldRenderer(canvasRef) {
     mesh:        null,
     wheelMeshes: [],          // nós GLB cujo nome contém 'wheel'
     pos:         new Vector3(0, 0, 0),
+    groundY:     0.42,        // 0 para GLB, 0.42 para box
     angle: 0,
     speed: 0,
     maxSpeed: 15, accel: 24, friction: 9, turnSpeed: 2.3,
@@ -709,13 +710,17 @@ export function useWorldRenderer(canvasRef) {
 
         scene.add(root)
         vehicle.mesh = root
+        vehicle.groundY = 0  // GLB tem origem no chão
       }, undefined, () => {
+        // Fallback: GLB falhou, usar box
         vehicle.mesh = _buildBoxVehicle(0x6c5ce7)
+        vehicle.groundY = 0.42
         vehicle.mesh.position.copy(vehicle.pos)
         scene.add(vehicle.mesh)
       })
     } else {
       vehicle.mesh = _buildBoxVehicle(0x6c5ce7)
+      vehicle.groundY = 0.42
       vehicle.mesh.position.copy(vehicle.pos)
       scene.add(vehicle.mesh)
     }
@@ -739,6 +744,10 @@ export function useWorldRenderer(canvasRef) {
         else                  pos.x += lane
         pos.y = 0.42
 
+        const dir   = i % 2 === 0 ? 1 : -1
+        const baseAngle = seg.axis === 'x' ? Math.PI / 2 : 0
+        const yAngle    = baseAngle + (dir === -1 ? Math.PI : 0)
+
         const color = palette[(si * 3 + i) % palette.length]
         const catalogItem = activeGlb.length ? activeGlb[(si * 3 + i) % activeGlb.length] : null
 
@@ -752,7 +761,7 @@ export function useWorldRenderer(canvasRef) {
             const scale = catalogItem.vehicleAsset?.scaleFactor ?? 1
             root.scale.setScalar(scale)
             root.castShadow = true
-            if (seg.axis === 'x') root.rotation.y = Math.PI / 2
+            root.rotation.y = yAngle
             root.position.set(pos.x, 0, pos.z)
 
             _applyGlbMaterial(root, catalogItem.vehicleAsset?.material)
@@ -765,7 +774,7 @@ export function useWorldRenderer(canvasRef) {
               }
             })
 
-            root.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane, wheelMeshes }
+            root.userData = { seg, t, dir, speed: 8 + rng() * 7, lane, wheelMeshes, groundY: 0 }
             scene.add(root)
             ambientCars.push(root)
           }, undefined, () => {
@@ -773,9 +782,9 @@ export function useWorldRenderer(canvasRef) {
             const mat  = new MeshLambertMaterial({ color })
             const mesh = new Mesh(new BoxGeometry(1.5, 0.65, 2.8), mat)
             mesh.castShadow = true
-            if (seg.axis === 'x') mesh.rotation.y = Math.PI / 2
+            mesh.rotation.y = yAngle
             mesh.position.set(pos.x, 0.42, pos.z)
-            mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane }
+            mesh.userData = { seg, t, dir, speed: 8 + rng() * 7, lane, groundY: 0.42 }
             scene.add(mesh)
             ambientCars.push(mesh)
           })
@@ -783,9 +792,9 @@ export function useWorldRenderer(canvasRef) {
           const mat  = new MeshLambertMaterial({ color })
           const mesh = new Mesh(new BoxGeometry(1.5, 0.65, 2.8), mat)
           mesh.castShadow = true
-          if (seg.axis === 'x') mesh.rotation.y = Math.PI / 2
+          mesh.rotation.y = yAngle
           mesh.position.set(pos.x, 0.42, pos.z)
-          mesh.userData = { seg, t, dir: i % 2 === 0 ? 1 : -1, speed: 8 + rng() * 7, lane }
+          mesh.userData = { seg, t, dir, speed: 8 + rng() * 7, lane, groundY: 0.42 }
           scene.add(mesh)
           ambientCars.push(mesh)
         }
@@ -892,7 +901,7 @@ export function useWorldRenderer(canvasRef) {
     }
     vehicle.pos.x += Math.sin(vehicle.angle) * vehicle.speed * dt
     vehicle.pos.z += Math.cos(vehicle.angle) * vehicle.speed * dt
-    vehicle.pos.y  = 0.42
+    vehicle.pos.y  = vehicle.groundY
     if (vehicle.mesh) { vehicle.mesh.position.copy(vehicle.pos); vehicle.mesh.rotation.y = vehicle.angle }
 
     // Girar rodas proporcionalmente à velocidade
@@ -906,14 +915,14 @@ export function useWorldRenderer(canvasRef) {
 
   function _updateAmbientCars(dt) {
     ambientCars.forEach(car => {
-      const { seg, speed, dir, lane, wheelMeshes } = car.userData
+      const { seg, speed, dir, lane, wheelMeshes, groundY = 0 } = car.userData
       car.userData.t += (speed * dt / seg.length) * dir
       if (car.userData.t > 1) car.userData.t = 0
       if (car.userData.t < 0) car.userData.t = 1
       const p = seg.from.clone().lerp(seg.to, car.userData.t)
       if (seg.axis === 'x') p.z += lane
       else                  p.x += lane
-      car.position.set(p.x, 0.42, p.z)
+      car.position.set(p.x, groundY, p.z)
 
       // Girar rodas dos carros ambiente
       if (wheelMeshes?.length) {
