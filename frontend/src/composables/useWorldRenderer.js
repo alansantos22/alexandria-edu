@@ -79,6 +79,7 @@ export function useWorldRenderer(canvasRef) {
   // Day/night state
   let dayTime    = 0.30
   let skyMesh    = null
+  let cloudMesh  = null
   let starPoints = null
   let ambLight   = null
   let hemiLight  = null
@@ -194,6 +195,93 @@ export function useWorldRenderer(canvasRef) {
     skyMesh = new Mesh(new SphereGeometry(700, 32, 16), mat)
     skyMesh.renderOrder = -1
     scene.add(skyMesh)
+  }
+
+  function _buildClouds() {
+    const mat = new ShaderMaterial({
+      side: BackSide,
+      depthWrite: false,
+      fog: false,
+      transparent: true,
+      uniforms: {
+        uTime: { value: 0 },
+      },
+      vertexShader: /* glsl */`
+        varying vec3 vPos;
+        void main() {
+          vPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform float uTime;
+        varying vec3 vPos;
+
+        // Value noise: hash returns float in [0,1]
+        float hash(vec3 p) {
+          return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+        }
+
+        // Trilinear value noise, output in [0, 1]
+        float noise(vec3 p) {
+          vec3 i = floor(p);
+          vec3 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(mix(hash(i),               hash(i+vec3(1,0,0)), f.x),
+                mix(hash(i+vec3(0,1,0)),   hash(i+vec3(1,1,0)), f.x), f.y),
+            mix(mix(hash(i+vec3(0,0,1)),   hash(i+vec3(1,0,1)), f.x),
+                mix(hash(i+vec3(0,1,1)),   hash(i+vec3(1,1,1)), f.x), f.y),
+            f.z
+          );
+        }
+
+        void main() {
+          vec3 dir = normalize(vPos);
+          float y = dir.y;
+
+          // Only upper hemisphere
+          if (y < 0.05) { gl_FragColor = vec4(0.0); return; }
+
+          // Project ray to cloud layer plane (height band)
+          float h = 0.35 / max(y, 0.05);
+          vec3 p = dir * h;
+          p.x += uTime * 0.015;
+          p.z += uTime * 0.008;
+          p *= 2.5;
+
+          // FBM – each octave is strictly [0, 1], sum is [0, 1.75], divided → [0, 1]
+          float n = 0.0;
+          n += 1.000 * noise(p);
+          n += 0.500 * noise(p * 2.0 + vec3(1.7, 9.2, 3.5));
+          n += 0.250 * noise(p * 4.0 + vec3(8.3, 2.8, 5.1));
+          n /= 1.75;
+
+          // Cloud shape with gentle threshold
+          float cloud = smoothstep(0.48, 0.68, n);
+
+          // Fade softly at horizon
+          float fade = smoothstep(0.05, 0.18, y);
+          cloud *= fade;
+
+          if (cloud < 0.01) { gl_FragColor = vec4(0.0); return; }
+
+          // Slight shading: center brighter, edges slightly grey
+          float shade = mix(0.88, 1.0, cloud);
+          gl_FragColor = vec4(shade, shade, shade, cloud * 0.92);
+        }
+      `,
+    })
+
+    cloudMesh = new Mesh(new SphereGeometry(680, 32, 16), mat)
+    cloudMesh.renderOrder = 1   // render after sky (renderOrder -1)
+    scene.add(cloudMesh)
+  }
+
+  function _updateClouds(dt) {
+    if (cloudMesh) {
+      cloudMesh.material.uniforms.uTime.value += dt
+    }
   }
 
   function _buildStars() {
@@ -637,6 +725,7 @@ export function useWorldRenderer(canvasRef) {
       const dt = Math.min((now - lastTime) / 1000, 0.05)
       lastTime = now
       _updateDayNight(dt)
+      _updateClouds(dt)
       if (mode === 'walking') _updateNpc(dt)
       else                    _updateVehicle(dt)
       _updateAmbientCars(dt)
@@ -961,6 +1050,7 @@ export function useWorldRenderer(canvasRef) {
     _buildCameras(W, H)
     _buildLights()
     _buildSky()
+    _buildClouds()
     _buildStars()
     _attachControls(canvas)
     _startLoop()
