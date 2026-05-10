@@ -91,6 +91,14 @@ export function useWorldRenderer(canvasRef) {
   const roadSegments = []
   const ambientCars  = []
 
+  // ── Free camera control (mouse look) ────────────────────────────────────────
+  let freeCamPitch = 0       // Up/down rotation (radians)
+  let freeCamYaw   = 0       // Left/right rotation (radians)
+  let freeCamRadius = 10     // Distance from player
+  let freeCamHeight = 2      // Height above player
+  const freeCamDrag = { active: false, lastX: 0, lastY: 0 }
+  const freeCamSpeed = 0.003 // Mouse sensitivity
+
   let mode = 'walking'
 
   const npc = {
@@ -601,6 +609,7 @@ export function useWorldRenderer(canvasRef) {
     mode = 'driving'
     playerMode.value = 'driving'
     if (npc.group) npc.group.visible = false
+    freeCamDrag.active = false // Stop mouse look when entering vehicle
   }
 
   function _exitVehicle() {
@@ -615,6 +624,10 @@ export function useWorldRenderer(canvasRef) {
       npc.group.rotation.y = npc.angle
       npc.group.visible = cameraMode !== 2
     }
+    // Reset free camera to default position
+    freeCamYaw = 0
+    freeCamPitch = -0.3
+    freeCamDrag.active = false
   }
 
   // ── Game loop ──────────────────────────────────────────────────────────────────
@@ -641,9 +654,20 @@ export function useWorldRenderer(canvasRef) {
     if (fwd)  npc.speed = Math.min(npc.speed + npc.accel * dt, npc.maxSpeed)
     if (back) npc.speed = Math.max(npc.speed - npc.accel * dt, -npc.maxSpeed * 0.4)
     if (!fwd && !back) npc.speed *= Math.max(0, 1 - npc.friction * dt)
-    if (Math.abs(npc.speed) > 0.1) {
-      npc.angle += ((left ? 1 : 0) - (right ? 1 : 0)) * npc.turnSpeed * dt * Math.sign(npc.speed)
+    
+    // In first person (cameraMode 2), keyboard can also rotate
+    if (cameraMode === 2) {
+      if (Math.abs(npc.speed) > 0.1) {
+        freeCamYaw += ((left ? 1 : 0) - (right ? 1 : 0)) * npc.turnSpeed * dt * Math.sign(npc.speed)
+      }
+      npc.angle = freeCamYaw
+    } else {
+      // In third person, use keyboard for rotation (only when moving)
+      if (Math.abs(npc.speed) > 0.1) {
+        npc.angle += ((left ? 1 : 0) - (right ? 1 : 0)) * npc.turnSpeed * dt * Math.sign(npc.speed)
+      }
     }
+    
     npc.pos.x += Math.sin(npc.angle) * npc.speed * dt
     npc.pos.z += Math.cos(npc.angle) * npc.speed * dt
     npc.pos.y  = 0
@@ -699,21 +723,63 @@ export function useWorldRenderer(canvasRef) {
       camLookAt.y  = 0
     } else if (cameraMode === 1) {
       camera = perspCamera
-      const idealX = target.x - Math.sin(angle) * 12
-      const idealZ = target.z - Math.cos(angle) * 12
-      camPos.x += (idealX          - camPos.x) * lerpK
-      camPos.y += (target.y + 5    - camPos.y) * lerpK
-      camPos.z += (idealZ          - camPos.z) * lerpK
-      camLookAt.x += (target.x     - camLookAt.x) * lerpK
-      camLookAt.y += (target.y + 1 - camLookAt.y) * lerpK
-      camLookAt.z += (target.z     - camLookAt.z) * lerpK
+      
+      // Free camera look with mouse (only when walking)
+      if (mode === 'walking') {
+        // Position camera based on pitch and yaw
+        const cosP = Math.cos(freeCamPitch)
+        const sinP = Math.sin(freeCamPitch)
+        const cosY = Math.cos(freeCamYaw)
+        const sinY = Math.sin(freeCamYaw)
+        
+        const offsetX = freeCamRadius * cosP * sinY
+        const offsetY = freeCamHeight + freeCamRadius * sinP
+        const offsetZ = freeCamRadius * cosP * cosY
+        
+        camPos.set(
+          target.x + offsetX,
+          target.y + offsetY,
+          target.z + offsetZ
+        )
+        
+        // Look at player
+        camLookAt.set(target.x, target.y + 0.5, target.z)
+      } else {
+        // Default third person camera when driving
+        const idealX = target.x - Math.sin(angle) * 12
+        const idealZ = target.z - Math.cos(angle) * 12
+        camPos.x += (idealX          - camPos.x) * lerpK
+        camPos.y += (target.y + 5    - camPos.y) * lerpK
+        camPos.z += (idealZ          - camPos.z) * lerpK
+        camLookAt.x += (target.x     - camLookAt.x) * lerpK
+        camLookAt.y += (target.y + 1 - camLookAt.y) * lerpK
+        camLookAt.z += (target.z     - camLookAt.z) * lerpK
+      }
     } else {
+      // First person camera (cameraMode === 2)
       camera = perspCamera
       const lf = Math.min(1, 18 * dt)
       camPos.x += (target.x + Math.sin(angle) * 0.3 - camPos.x) * lf
       camPos.y += (target.y + 1.6                   - camPos.y) * lf
       camPos.z += (target.z + Math.cos(angle) * 0.3 - camPos.z) * lf
-      camLookAt.set(camPos.x + Math.sin(angle) * 10, camPos.y, camPos.z + Math.cos(angle) * 10)
+      
+      // Free look with mouse or default forward look
+      if (freeCamDrag.active) {
+        // Mouse look enabled - look in pitch/yaw direction
+        const cosP = Math.cos(freeCamPitch)
+        const sinP = Math.sin(freeCamPitch)
+        const cosY = Math.cos(freeCamYaw)
+        const sinY = Math.sin(freeCamYaw)
+        
+        camLookAt.set(
+          camPos.x + sinY * cosP * 10,
+          camPos.y + sinP * 10,
+          camPos.z + cosY * cosP * 10
+        )
+      } else {
+        // Default look - forward relative to player angle
+        camLookAt.set(camPos.x + Math.sin(angle) * 10, camPos.y, camPos.z + Math.cos(angle) * 10)
+      }
     }
 
     camera.position.copy(camPos)
@@ -773,12 +839,20 @@ export function useWorldRenderer(canvasRef) {
     window.addEventListener('keydown', _onKey)
     window.addEventListener('keyup',   _onKey)
     canvas.addEventListener('wheel', _onWheel, { passive: false })
+    canvas.addEventListener('mousedown', _onMouseDown, { passive: true })
+    canvas.addEventListener('mousemove', _onMouseMove, { passive: true })
+    canvas.addEventListener('mouseup',   _onMouseUp,   { passive: true })
+    canvas.addEventListener('mouseleave', _onMouseUp,  { passive: true })
   }
 
   function _detachControls() {
     window.removeEventListener('keydown', _onKey)
     window.removeEventListener('keyup',   _onKey)
     canvasRef.value?.removeEventListener('wheel', _onWheel)
+    canvasRef.value?.removeEventListener('mousedown', _onMouseDown)
+    canvasRef.value?.removeEventListener('mousemove', _onMouseMove)
+    canvasRef.value?.removeEventListener('mouseup',   _onMouseUp)
+    canvasRef.value?.removeEventListener('mouseleave', _onMouseUp)
   }
 
   function _onKey(e) {
@@ -796,6 +870,12 @@ export function useWorldRenderer(canvasRef) {
       if (e.code === 'KeyC' && !keysDown.has('KeyC')) {
         cameraMode = (cameraMode + 1) % 3
         cameraModeRef.value = cameraMode
+        
+        // Reset free camera when entering first person (mode 2)
+        if (cameraMode === 2) {
+          freeCamYaw = npc.angle
+          freeCamPitch = -0.1
+        }
       }
       keysDown.add(e.code)
     } else {
@@ -811,6 +891,35 @@ export function useWorldRenderer(canvasRef) {
     orthoCamera.left = -camFrustum * a; orthoCamera.right  =  camFrustum * a
     orthoCamera.top  =  camFrustum;     orthoCamera.bottom = -camFrustum
     orthoCamera.updateProjectionMatrix()
+  }
+
+  function _onMouseDown(e) {
+    // Enable mouse look in cameraMode 1 (third person) and cameraMode 2 (first person) when walking
+    if ((cameraMode === 1 || cameraMode === 2) && mode === 'walking') {
+      freeCamDrag.active = true
+      freeCamDrag.lastX = e.clientX
+      freeCamDrag.lastY = e.clientY
+    }
+  }
+
+  function _onMouseMove(e) {
+    if (!freeCamDrag.active) return
+
+    const deltaX = e.clientX - freeCamDrag.lastX
+    const deltaY = e.clientY - freeCamDrag.lastY
+
+    freeCamYaw   -= deltaX * freeCamSpeed
+    freeCamPitch += deltaY * freeCamSpeed
+
+    // Clamp pitch to avoid flipping
+    freeCamPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, freeCamPitch))
+
+    freeCamDrag.lastX = e.clientX
+    freeCamDrag.lastY = e.clientY
+  }
+
+  function _onMouseUp() {
+    freeCamDrag.active = false
   }
 
   // ── Resize / Dispose ───────────────────────────────────────────────────────────
