@@ -2,8 +2,12 @@ import api from '@/core/api'
 
 // ── Admin ──────────────────────────────────────────────────────────────────
 
-export async function adminUploadBackground(formData) {
-  const { data } = await api.post('/admin/backgrounds/upload', formData, {
+export async function adminUploadBackground(formData, queryParams) {
+  const url = queryParams 
+    ? `/admin/backgrounds/upload?${queryParams}`
+    : '/admin/backgrounds/upload'
+  
+  const { data } = await api.post(url, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data

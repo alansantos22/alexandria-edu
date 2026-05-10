@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -34,7 +35,7 @@ export class AdminController {
   ) {
     // Fastify multipart: lemos o arquivo como buffer
     const data = await req.file();
-    if (!data) throw new Error('Nenhum arquivo enviado.');
+    if (!data) throw new BadRequestException('Nenhum arquivo enviado.');
 
     const chunks: Buffer[] = [];
     for await (const chunk of data.file) {
@@ -42,12 +43,19 @@ export class AdminController {
     }
     const buffer = Buffer.concat(chunks);
 
+    // Validar parâmetros obrigatórios
+    if (!name) throw new BadRequestException('Parâmetro obrigatório: name');
+    if (!rarity) throw new BadRequestException('Parâmetro obrigatório: rarity');
+    if (!priceCoins || isNaN(Number(priceCoins))) {
+      throw new BadRequestException('Parâmetro obrigatório e válido: priceCoins (número)');
+    }
+
     const dto: CreateBackgroundDto = {
       name,
-      description,
-      rarity:     rarity as any,
-      priceCoins: Number(priceCoins),
-      stock:      stock ? Number(stock) : undefined,
+      description: description || undefined,
+      rarity:      rarity as any,
+      priceCoins:  Number(priceCoins),
+      stock:       stock && !isNaN(Number(stock)) ? Number(stock) : undefined,
     };
 
     return this.adminService.createBackground(

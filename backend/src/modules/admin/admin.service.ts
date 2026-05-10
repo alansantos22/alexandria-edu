@@ -39,6 +39,11 @@ export class AdminService {
       throw new BadRequestException('Imagem excede o limite de 5 MB.');
     }
 
+    // Validar que priceCoins é um número válido
+    if (isNaN(dto.priceCoins) || dto.priceCoins < 0) {
+      throw new BadRequestException('priceCoins deve ser um número válido e não-negativo.');
+    }
+
     // Garantir que a pasta existe
     fs.mkdirSync(this.uploadsDir, { recursive: true });
 
