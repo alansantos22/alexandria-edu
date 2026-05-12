@@ -24,6 +24,13 @@ const ROAD_REACH      = 1800
 const ROAD_GRID_N     = 5
 const MAX_TREES       = 2800
 const TERRAIN_HALF    = 420
+const TERRAIN_SEGMENTS = 256
+const TERRAIN_AMPLITUDE = 7         // altura máxima das colinas em unidades de mundo
+const TERRAIN_FREQ     = 0.012      // frequência base do FBM
+const ROAD_FLAT_INNER  = HALF_ROAD_TOTAL + 1.5
+const ROAD_FLAT_OUTER  = HALF_ROAD_TOTAL + 6
+const CITY_FLAT_INNER  = PLOT_RADIUS + 2
+const CITY_FLAT_OUTER  = PLOT_RADIUS + 8
 const ENTER_DIST      = 6
 const DASH_LEN        = 4
 const GAP_LEN         = 6
@@ -44,6 +51,52 @@ const PHASES = [
 ]
 
 const noise = new SimplexNoise()
+
+// ── Procedural terrain ─────────────────────────────────────────────────────────
+// FBM com 4 oitavas — perfil de colinas suaves. Determinístico (SimplexNoise sem seed externo)
+function _fbm(x, z) {
+  let h = 0, amp = 1, freq = TERRAIN_FREQ, max = 0
+  for (let i = 0; i < 4; i++) {
+    h   += amp * noise.noise(x * freq, z * freq)
+    max += amp
+    amp *= 0.5
+    freq *= 2
+  }
+  return h / max
+}
+
+function _flattenFactor(d, inner, outer) {
+  if (d <= inner) return 0
+  if (d >= outer) return 1
+  const t = (d - inner) / (outer - inner)
+  return 0.5 - 0.5 * Math.cos(t * Math.PI)
+}
+
+// `cityCenters` é precomputado em loadWorld pra evitar alocação no hot path
+let _cityCenters = []
+
+export function heightAt(x, z) {
+  let h = _fbm(x, z) * TERRAIN_AMPLITUDE
+  if (h === 0) return 0
+
+  // Aplaina perto de cada eixo de estrada (zRoad em x=n*WORLD_SCALE, xRoad em z=n*WORLD_SCALE)
+  for (let n = -ROAD_GRID_N; n <= ROAD_GRID_N; n++) {
+    const c = n * WORLD_SCALE
+    h *= _flattenFactor(Math.abs(x - c), ROAD_FLAT_INNER, ROAD_FLAT_OUTER)
+    if (h === 0) return 0
+    h *= _flattenFactor(Math.abs(z - c), ROAD_FLAT_INNER, ROAD_FLAT_OUTER)
+    if (h === 0) return 0
+  }
+
+  // Aplaina footprint das cidades (Chebyshev distance — caixa, casa com o plot quadrado)
+  for (const c of _cityCenters) {
+    const d = Math.max(Math.abs(x - c.x), Math.abs(z - c.z))
+    h *= _flattenFactor(d, CITY_FLAT_INNER, CITY_FLAT_OUTER)
+    if (h === 0) return 0
+  }
+
+  return h
+}
 
 function seededRng(seed) {
   let s = (seed ^ 0xdeadbeef) >>> 0
@@ -366,6 +419,12 @@ export function useWorldRenderer(canvasRef) {
 
   // ── World generation ───────────────────────────────────────────────────────────
   function loadWorld(cities, { activeVehicle = null, vehicleCatalog = [] } = {}) {
+    // Precomputa centros das cidades pra heightAt() consultar sem alocar
+    _cityCenters = cities.map(c => {
+      const p = cityVisualPos(c)
+      return { x: p.x, z: p.z }
+    })
+
     _generateTerrain()
     _generateRoads()
     _generateVegetation(cities)
@@ -376,10 +435,20 @@ export function useWorldRenderer(canvasRef) {
   }
 
   function _generateTerrain() {
-    const mesh = new Mesh(
-      new PlaneGeometry(TERRAIN_HALF * 2, TERRAIN_HALF * 2),
-      new MeshLambertMaterial({ color: 0x3d7a28 }),
-    )
+    const geo = new PlaneGeometry(TERRAIN_HALF * 2, TERRAIN_HALF * 2, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS)
+    const pos = geo.attributes.position
+    // PlaneGeometry vive no plano XY. Após rotation.x = -π/2, vertex local (x, y, z) → world (x, z, -y).
+    // Sampleamos heightAt(x_world, z_world = -y_local) e setamos z_local = height,
+    // para que após a rotação Y do mundo receba a altura correta.
+    for (let i = 0; i < pos.count; i++) {
+      const lx = pos.getX(i)
+      const ly = pos.getY(i)
+      pos.setZ(i, heightAt(lx, -ly))
+    }
+    pos.needsUpdate = true
+    geo.computeVertexNormals()
+
+    const mesh = new Mesh(geo, new MeshLambertMaterial({ color: 0x3d7a28 }))
     mesh.rotation.x = -Math.PI / 2
     mesh.receiveShadow = true
     scene.add(mesh)
@@ -501,24 +570,26 @@ export function useWorldRenderer(canvasRef) {
     let t1Idx = 0, t2Idx = 0, t3Idx = 0, c1Idx = 0, c2Idx = 0, c3Idx = 0
     
     placed.forEach(({ x, z, s, tVar, cVar }, i) => {
+      const gy = heightAt(x, z)  // altura do terreno na posição da árvore
+
       // Distribuir entre diferentes variações de tronco
       let trunkType = Math.floor(tVar * 3)
       if (trunkType === 0 && t1Idx < Math.floor(n * 0.5)) {
-        mm.makeScale(s, s, s); mm.setPosition(x, 0.65 * s, z); trunk1Inst.setMatrixAt(t1Idx++, mm)
+        mm.makeScale(s, s, s); mm.setPosition(x, gy + 0.65 * s, z); trunk1Inst.setMatrixAt(t1Idx++, mm)
       } else if (trunkType === 1 && t2Idx < Math.floor(n * 0.4)) {
-        mm.makeScale(s, s, s); mm.setPosition(x, 0.75 * s, z); trunk2Inst.setMatrixAt(t2Idx++, mm)
+        mm.makeScale(s, s, s); mm.setPosition(x, gy + 0.75 * s, z); trunk2Inst.setMatrixAt(t2Idx++, mm)
       } else if (t3Idx < Math.floor(n * 0.4)) {
-        mm.makeScale(s, s, s); mm.setPosition(x, 0.60 * s, z); trunk3Inst.setMatrixAt(t3Idx++, mm)
+        mm.makeScale(s, s, s); mm.setPosition(x, gy + 0.60 * s, z); trunk3Inst.setMatrixAt(t3Idx++, mm)
       }
-      
+
       // Distribuir entre diferentes variações de copa
       let coneType = Math.floor(cVar * 3)
       if (coneType === 0 && c1Idx < Math.floor(n * 0.5)) {
-        mm.makeScale(s, s, s); mm.setPosition(x, 2.0 * s, z); cone1Inst.setMatrixAt(c1Idx++, mm)
+        mm.makeScale(s, s, s); mm.setPosition(x, gy + 2.0 * s, z); cone1Inst.setMatrixAt(c1Idx++, mm)
       } else if (coneType === 1 && c2Idx < Math.floor(n * 0.3)) {
-        mm.makeScale(s, s, s); mm.setPosition(x, 2.25 * s, z); cone2Inst.setMatrixAt(c2Idx++, mm)
+        mm.makeScale(s, s, s); mm.setPosition(x, gy + 2.25 * s, z); cone2Inst.setMatrixAt(c2Idx++, mm)
       } else if (c3Idx < Math.floor(n * 0.3)) {
-        mm.makeScale(s, s, s); mm.setPosition(x, 1.85 * s, z); cone3Inst.setMatrixAt(c3Idx++, mm)
+        mm.makeScale(s, s, s); mm.setPosition(x, gy + 1.85 * s, z); cone3Inst.setMatrixAt(c3Idx++, mm)
       }
     })
     
@@ -829,7 +900,7 @@ export function useWorldRenderer(canvasRef) {
     playerMode.value = 'walking'
     const right = new Vector3(Math.cos(vehicle.angle), 0, -Math.sin(vehicle.angle))
     npc.pos.copy(vehicle.pos).addScaledVector(right, 2.2)
-    npc.pos.y = 0
+    npc.pos.y = heightAt(npc.pos.x, npc.pos.z)
     npc.angle = vehicle.angle
     if (npc.group) {
       npc.group.position.copy(npc.pos)
@@ -883,7 +954,7 @@ export function useWorldRenderer(canvasRef) {
     
     npc.pos.x += Math.sin(npc.angle) * npc.speed * dt
     npc.pos.z += Math.cos(npc.angle) * npc.speed * dt
-    npc.pos.y  = 0
+    npc.pos.y  = heightAt(npc.pos.x, npc.pos.z)
     if (npc.group) { npc.group.position.copy(npc.pos); npc.group.rotation.y = npc.angle }
     playerPos.value = { x: Math.round(npc.pos.x), z: Math.round(npc.pos.z) }
   }
@@ -901,7 +972,7 @@ export function useWorldRenderer(canvasRef) {
     }
     vehicle.pos.x += Math.sin(vehicle.angle) * vehicle.speed * dt
     vehicle.pos.z += Math.cos(vehicle.angle) * vehicle.speed * dt
-    vehicle.pos.y  = vehicle.groundY
+    vehicle.pos.y  = heightAt(vehicle.pos.x, vehicle.pos.z) + vehicle.groundY
     if (vehicle.mesh) { vehicle.mesh.position.copy(vehicle.pos); vehicle.mesh.rotation.y = vehicle.angle }
 
     // Girar rodas proporcionalmente à velocidade

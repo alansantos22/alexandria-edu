@@ -223,7 +223,7 @@ async function loadCity() {
     vehicles.value = vehicleData
     loadedBuildings.value = buildingsData
 
-    renderChunks(cityData.chunks)
+    renderChunks(cityData.chunks, cityData.meta?.frontEdge ?? 0)
 
     // Render placed GLB buildings in explore mode
     if (buildingsData.length > 0) {

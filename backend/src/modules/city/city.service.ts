@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CityRepository, WorldCityInfo } from './city.repository';
+import { CityRepository, WorldCityInfo, WorldAdjacency } from './city.repository';
 import { EconomyService } from '../economy/economy.service';
 import { UpsertChunkDto } from './dto/upsert-chunk.dto';
 import { PurchaseVehicleDto } from './dto/purchase-vehicle.dto';
@@ -233,6 +233,10 @@ export class CityService {
 
   getWorldMap(): Promise<WorldCityInfo[]> {
     return this.cityRepository.findWorldMap();
+  }
+
+  getWorldAdjacencies(): Promise<WorldAdjacency[]> {
+    return this.cityRepository.findAdjacencies();
   }
 }
 

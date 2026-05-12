@@ -38,13 +38,34 @@ export class CityRepository {
   async createMeta(userId: string): Promise<CityMeta> {
     const seed = randomUUID();
     const worldPos = await this.nextAvailableWorldPosition();
+    const frontEdge = await this.deriveFrontEdge(worldPos.x, worldPos.z);
     const meta = this.metaRepo.create({
       userId,
       citySeed: seed,
       worldX: worldPos.x,
       worldZ: worldPos.z,
+      frontEdge,
     });
     return this.metaRepo.save(meta);
+  }
+
+  /** Escolhe a direção da estrada incidente na ordem de prioridade N>E>S>W.
+   *  Cidades isoladas (sem vizinhos no grid) ficam com 0 (N). */
+  private async deriveFrontEdge(worldX: number, worldZ: number): Promise<number> {
+    const neighbors: Array<[number, number, number]> = [
+      [worldX,     worldZ - 1, 0], // N
+      [worldX + 1, worldZ,     1], // E
+      [worldX,     worldZ + 1, 2], // S
+      [worldX - 1, worldZ,     3], // W
+    ];
+    for (const [nx, nz, edge] of neighbors) {
+      const exists = await this.metaRepo.findOne({
+        where: { worldX: nx, worldZ: nz },
+        select: ['userId'],
+      });
+      if (exists) return edge;
+    }
+    return 0;
   }
 
   async incrementBuildings(userId: string, delta: number): Promise<void> {
@@ -262,6 +283,7 @@ export class CityRepository {
         u.username,
         cm.world_x         AS worldX,
         cm.world_z         AS worldZ,
+        cm.front_edge      AS frontEdge,
         cm.city_level      AS cityLevel,
         cm.total_buildings AS totalBuildings,
         GROUP_CONCAT(
@@ -272,7 +294,7 @@ export class CityRepository {
       FROM city_meta cm
       JOIN users u ON u.id = cm.user_id
       LEFT JOIN land_tiles lt ON lt.city_user_id = cm.user_id
-      GROUP BY cm.user_id, u.username, cm.world_x, cm.world_z, cm.city_level, cm.total_buildings
+      GROUP BY cm.user_id, u.username, cm.world_x, cm.world_z, cm.front_edge, cm.city_level, cm.total_buildings
       ORDER BY cm.total_buildings DESC
     `);
 
@@ -338,6 +360,30 @@ export class CityRepository {
       landTilesRaw: undefined,
     }));
   }
+
+  /** Pares de cidades adjacentes no grid (worldX±1 ou worldZ±1).
+   *  Retorna cada par uma única vez. `axis` 'x' = vizinhança em X (A à esquerda de B),
+   *  'z' = vizinhança em Z (A acima de B). */
+  async findAdjacencies(): Promise<WorldAdjacency[]> {
+    const rows: any[] = await this.metaRepo.query(`
+      SELECT a.user_id AS aUserId, b.user_id AS bUserId, 'x' AS axis
+        FROM city_meta a
+        JOIN city_meta b
+          ON b.world_x = a.world_x + 1 AND b.world_z = a.world_z
+      UNION ALL
+      SELECT a.user_id AS aUserId, b.user_id AS bUserId, 'z' AS axis
+        FROM city_meta a
+        JOIN city_meta b
+          ON b.world_x = a.world_x AND b.world_z = a.world_z + 1
+    `);
+    return rows.map(r => ({ aUserId: r.aUserId, bUserId: r.bUserId, axis: r.axis }));
+  }
+}
+
+export interface WorldAdjacency {
+  aUserId: string;
+  bUserId: string;
+  axis: 'x' | 'z';
 }
 
 export interface WorldCityInfo {
@@ -345,6 +391,7 @@ export interface WorldCityInfo {
   username: string;
   worldX: number;
   worldZ: number;
+  frontEdge: number;
   cityLevel: number;
   totalBuildings: number;
   landTiles: { x: number; z: number }[];

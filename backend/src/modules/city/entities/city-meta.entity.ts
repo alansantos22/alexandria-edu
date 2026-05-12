@@ -27,6 +27,10 @@ export class CityMeta {
   @Column({ name: 'world_z', type: 'int', default: 0 })
   worldZ: number;
 
+  /** 0=N, 1=E, 2=S, 3=W — direção da estrada que a cidade encara. */
+  @Column({ name: 'front_edge', type: 'tinyint', unsigned: true, default: 0 })
+  frontEdge: number;
+
   @Column({ name: 'city_level', type: 'tinyint', unsigned: true, default: 1 })
   cityLevel: number;
 

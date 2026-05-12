@@ -46,9 +46,14 @@ function _categoryHeight(item) {
   return Math.max(item.sizeX, item.sizeZ) * 0.9
 }
 
+// Pivô do cityRoot = centro da build zone (canto inferior esquerdo + extent/2)
+const CITY_PIVOT = GRID_EXTENT * CELL / 2
+
 export function useCityRenderer(canvasRef) {
   let renderer, scene, camera, animId
   let ground
+  let cityRoot     // Group pivô — recebe rotation.y = frontEdge * π/2
+  let cityContent  // Group filho — contém todo o conteúdo da cidade (offset -pivô)
 
   // Build mode internals
   let buildGrid       = null
@@ -104,6 +109,17 @@ export function useCityRenderer(canvasRef) {
     scene.background = new Color(0x0e1124)
     scene.fog = new FogExp2(0x0e1124, 0.014)
 
+    // Dois grupos aninhados para rotacionar ao redor do centro do build zone:
+    // cityRoot (pivô) na posição do centro, cityContent compensa com offset negativo
+    // para que coords locais existentes (gridX*CELL etc.) caiam no lugar certo quando frontEdge=0.
+    cityRoot = new Group()
+    cityRoot.position.set(CITY_PIVOT, 0, CITY_PIVOT)
+    scene.add(cityRoot)
+
+    cityContent = new Group()
+    cityContent.position.set(-CITY_PIVOT, 0, -CITY_PIVOT)
+    cityRoot.add(cityContent)
+
     _buildCamera(W, H)
     _buildLights()
     _buildGround()
@@ -155,8 +171,14 @@ export function useCityRenderer(canvasRef) {
     )
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
-    scene.add(ground)
-    // No grid helper — clean green terrain
+    cityContent.add(ground)
+  }
+
+  /** Rotaciona o conteúdo da cidade pra alinhar com a estrada incidente.
+   *  edge: 0=N, 1=E, 2=S, 3=W (mesma convenção do backend). */
+  function setFrontEdge(edge) {
+    const e = ((edge ?? 0) | 0) % 4
+    if (cityRoot) cityRoot.rotation.y = e * Math.PI / 2
   }
 
   // ── Render loop ────────────────────────────────────────────────────
@@ -259,13 +281,13 @@ export function useCityRenderer(canvasRef) {
 
   const meshes = []
 
-  function loadCity(chunks) {
+  function loadCity(chunks, frontEdge = 0) {
     _clearMeshes()
     _clearPlacedMeshes() // reset before re-render (e.g. retry)
+    setFrontEdge(frontEdge)
     if (!chunks.length) {
-      // Center camera on build zone when city is empty
-      const zoneCenter = GRID_EXTENT * CELL / 2
-      cam.target.set(zoneCenter, 0, zoneCenter)
+      // Center camera on build zone when city is empty — pivot é (CITY_PIVOT, CITY_PIVOT) em world
+      cam.target.set(CITY_PIVOT, 0, CITY_PIVOT)
       _positionCamera()
       return
     }
@@ -295,7 +317,7 @@ export function useCityRenderer(canvasRef) {
       })
       mesh.instanceMatrix.needsUpdate = true
 
-      scene.add(mesh)
+      cityContent.add(mesh)
       meshes.push({ type, mesh })
     })
 
@@ -303,8 +325,10 @@ export function useCityRenderer(canvasRef) {
     const allZ = chunks.map(c => c.chunkZ)
     const cx = ((Math.min(...allX) + Math.max(...allX)) / 2 + 0.5) * CHUNK_SIZE * CELL
     const cz = ((Math.min(...allZ) + Math.max(...allZ)) / 2 + 0.5) * CHUNK_SIZE * CELL
-    cam.target.set(cx, 0, cz)
-    cityCenter.value = { x: cx, z: cz }
+    // cx/cz são coords locais ao cityContent — converte pra world via transforms do grupo
+    const worldCenter = cityContent.localToWorld(new Vector3(cx, 0, cz))
+    cam.target.copy(worldCenter)
+    cityCenter.value = { x: worldCenter.x, z: worldCenter.z }
     _positionCamera()
   }
 
@@ -325,7 +349,7 @@ export function useCityRenderer(canvasRef) {
 
   function _clearMeshes() {
     meshes.forEach(({ mesh }) => {
-      scene.remove(mesh)
+      cityContent.remove(mesh)
       mesh.geometry.dispose()
       mesh.material.dispose()
     })
@@ -372,7 +396,7 @@ export function useCityRenderer(canvasRef) {
 
     const mat = new LineBasicMaterial({ color: 0x00ff00, transparent: true, opacity: lineOpacity })
     buildGrid = new LineSegments(geo, mat)
-    scene.add(buildGrid)
+    cityContent.add(buildGrid)
   }
 
   // ── Owned tile visualization ───────────────────────────────────────
@@ -395,7 +419,7 @@ export function useCityRenderer(canvasRef) {
       const floor = new Mesh(geo, mat)
       floor.rotation.x = -Math.PI / 2
       floor.position.set(ox + size / 2, 0.02, oz + size / 2)
-      scene.add(floor)
+      cityContent.add(floor)
       tileMeshes.push(floor)
 
       // Tile border outline
@@ -409,14 +433,14 @@ export function useCityRenderer(canvasRef) {
       const bgeo = new BufferGeometry()
       bgeo.setAttribute('position', new Float32BufferAttribute(pts, 3))
       const border = new LineSegments(bgeo, new LineBasicMaterial({ color: 0x00d9c0, transparent: true, opacity: 0.55 }))
-      scene.add(border)
+      cityContent.add(border)
       tileMeshes.push(border)
     }
   }
 
   function _clearTileVisualization() {
     for (const m of tileMeshes) {
-      scene.remove(m)
+      cityContent.remove(m)
       m.geometry.dispose()
       if (Array.isArray(m.material)) m.material.forEach(x => x.dispose())
       else m.material.dispose()
@@ -457,7 +481,7 @@ export function useCityRenderer(canvasRef) {
 
   function _clearBuildGrid() {
     if (!buildGrid) return
-    scene.remove(buildGrid)
+    cityContent.remove(buildGrid)
     buildGrid.geometry.dispose()
     buildGrid.material.dispose()
     buildGrid = null
@@ -479,9 +503,10 @@ export function useCityRenderer(canvasRef) {
     const intersects = raycaster.intersectObject(ground)
     if (!intersects.length) return null
 
-    const pt = intersects[0].point
-    const gridX = Math.floor(pt.x / CELL)
-    const gridZ = Math.floor(pt.z / CELL)
+    // pt está em world space; converte pra local do cityContent pra usar nas coords de grid
+    const local = cityContent.worldToLocal(intersects[0].point.clone())
+    const gridX = Math.floor(local.x / CELL)
+    const gridZ = Math.floor(local.z / CELL)
 
     // Reject clicks outside the absolute build zone
     if (gridX < 0 || gridX >= GRID_EXTENT || gridZ < 0 || gridZ >= GRID_EXTENT) return null
@@ -521,7 +546,7 @@ export function useCityRenderer(canvasRef) {
         })
         ghostMesh = root
         ghostMesh.visible = false
-        scene.add(ghostMesh)
+        cityContent.add(ghostMesh)
       }, undefined, () => {
         if (token !== _ghostLoadToken) return
         _buildBoxGhost(item)
@@ -553,7 +578,7 @@ export function useCityRenderer(canvasRef) {
 
     ghostMesh = group
     ghostMesh.visible = false
-    scene.add(ghostMesh)
+    cityContent.add(ghostMesh)
   }
 
   function setGhostRotation(radians) {
@@ -605,7 +630,7 @@ export function useCityRenderer(canvasRef) {
   function removePlacedBuilding(buildingId) {
     const mesh = placedMeshes.get(buildingId)
     if (!mesh) return
-    scene.remove(mesh)
+    cityContent.remove(mesh)
     _disposeObject(mesh)
     placedMeshes.delete(buildingId)
   }
@@ -646,7 +671,7 @@ export function useCityRenderer(canvasRef) {
     )
     mesh.rotation.y = (building.rotation ?? 0) * Math.PI / 180
     mesh.userData.buildingId = building.id
-    scene.add(mesh)
+    cityContent.add(mesh)
     placedMeshes.set(building.id, mesh)
   }
 
@@ -709,7 +734,7 @@ export function useCityRenderer(canvasRef) {
       )
       root.rotation.y = (building.rotation ?? 0) * Math.PI / 180
       root.userData.buildingId = building.id
-      scene.add(root)
+      cityContent.add(root)
       placedMeshes.set(building.id, root)
     }, undefined, () => {
       // Fallback to box on load error
@@ -719,7 +744,7 @@ export function useCityRenderer(canvasRef) {
 
   function _clearGhostMesh() {
     if (!ghostMesh) return
-    scene.remove(ghostMesh)
+    cityContent.remove(ghostMesh)
     _disposeObject(ghostMesh)
     ghostMesh = null
     ghostItem = null
@@ -738,7 +763,7 @@ export function useCityRenderer(canvasRef) {
 
   function _clearPlacedMeshes() {
     placedMeshes.forEach((mesh) => {
-      scene.remove(mesh)
+      cityContent.remove(mesh)
       _disposeObject(mesh)
     })
     placedMeshes.clear()
@@ -795,6 +820,7 @@ export function useCityRenderer(canvasRef) {
     ready, cityCenter,
     // Core
     init, loadCity, resize, dispose,
+    setFrontEdge,
     // Build mode
     enterBuildMode, exitBuildMode,
     setBuildCallbacks,
