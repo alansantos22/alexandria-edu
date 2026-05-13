@@ -50,25 +50,40 @@ CREATE TABLE IF NOT EXISTS city_buildings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- Extend city_meta with CCU tracking
--- ccu_limit: max render budget per lot (default 2000)
--- ccu_used:  current used budget (updated on place/remove)
+-- Extend city_meta with CCU tracking (idempotente)
 -- ============================================================
-ALTER TABLE city_meta
-  ADD COLUMN ccu_limit SMALLINT UNSIGNED NOT NULL DEFAULT 2000 AFTER total_buildings,
-  ADD COLUMN ccu_used  SMALLINT UNSIGNED NOT NULL DEFAULT 0    AFTER ccu_limit;
+DROP PROCEDURE IF EXISTS migration_003_ccu_columns;
+CREATE PROCEDURE migration_003_ccu_columns()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_meta' AND COLUMN_NAME = 'ccu_limit'
+  ) THEN
+    ALTER TABLE city_meta ADD COLUMN ccu_limit SMALLINT UNSIGNED NOT NULL DEFAULT 2000 AFTER total_buildings;
+  END IF;
 
--- ============================================================
--- Seed: Initial palette items available to all players
--- ============================================================
-INSERT INTO city_palette (name, category, placement, ccu_cost, size_x, size_z, price_coins, icon, sort_order) VALUES
-  ('Casa Pequena',   'residential', 'grid',  15,  1, 1,   0, '🏠', 1),
-  ('Casa Média',     'residential', 'grid',  35,  2, 2, 150, '🏡', 2),
-  ('Apartamento',    'residential', 'grid',  70,  2, 3, 400, '🏢', 3),
-  ('Loja',           'commercial',  'grid',  25,  1, 1, 200, '🏪', 1),
-  ('Mercado',        'commercial',  'grid',  90,  3, 2, 600, '🏬', 2),
-  ('Árvore',         'nature',      'free',   5,  1, 1,   0, '🌳', 1),
-  ('Parque',         'nature',      'grid',  20,  2, 2, 100, '🌿', 2),
-  ('Fonte',          'decoration',  'free',  40,  1, 1, 300, '⛲', 1),
-  ('Banco de Praça', 'decoration',  'free',   8,  1, 1,  50, '🪑', 2),
-  ('Poste',          'decoration',  'free',   3,  1, 1,   0, '💡', 3);
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_meta' AND COLUMN_NAME = 'ccu_used'
+  ) THEN
+    ALTER TABLE city_meta ADD COLUMN ccu_used SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER ccu_limit;
+  END IF;
+END;
+CALL migration_003_ccu_columns();
+DROP PROCEDURE IF EXISTS migration_003_ccu_columns;
+
+-- Seed: Initial palette items (idempotente)
+INSERT IGNORE INTO city_palette (id, name, category, placement, ccu_cost, size_x, size_z, price_coins, icon, sort_order) VALUES
+  (UUID(), 'Casa Pequena',   'residential', 'grid',  15,  1, 1,   0, '🏠', 1),
+  (UUID(), 'Casa Média',     'residential', 'grid',  35,  2, 2, 150, '🏡', 2),
+  (UUID(), 'Apartamento',    'residential', 'grid',  70,  2, 3, 400, '🏢', 3),
+  (UUID(), 'Loja',           'commercial',  'grid',  25,  1, 1, 200, '🏪', 1),
+  (UUID(), 'Mercado',        'commercial',  'grid',  90,  3, 2, 600, '🏬', 2),
+  (UUID(), 'Árvore',         'nature',      'free',   5,  1, 1,   0, '🌳', 1),
+  (UUID(), 'Parque',         'nature',      'grid',  20,  2, 2, 100, '🌿', 2),
+  (UUID(), 'Fonte',          'decoration',  'free',  40,  1, 1, 300, '⛲', 1),
+  (UUID(), 'Banco de Praça', 'decoration',  'free',   8,  1, 1,  50, '🪑', 2),
+  (UUID(), 'Poste',          'decoration',  'free',   3,  1, 1,   0, '💡', 3);
+
+INSERT IGNORE INTO migrations (filename, applied_at, status)
+VALUES ('003-build-mode.sql', NOW(), 'applied');

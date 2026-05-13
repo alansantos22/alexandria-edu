@@ -18,22 +18,52 @@ CREATE TABLE IF NOT EXISTS city_materials (
   PRIMARY KEY (id)
 );
 
--- 2. Add material reference to building assets
-ALTER TABLE city_palette_assets
-  ADD COLUMN material_id VARCHAR(36) NULL AFTER palette_item_id;
+-- 2. Add material reference to building assets (idempotente)
+DROP PROCEDURE IF EXISTS migration_009_alter_assets;
+CREATE PROCEDURE migration_009_alter_assets()
+BEGIN
+  -- ADD COLUMN material_id
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'material_id'
+  ) THEN
+    ALTER TABLE city_palette_assets ADD COLUMN material_id VARCHAR(36) NULL AFTER palette_item_id;
+  END IF;
 
-ALTER TABLE city_palette_assets
-  ADD CONSTRAINT fk_cpa_material
-  FOREIGN KEY (material_id) REFERENCES city_materials(id) ON DELETE SET NULL;
+  -- ADD CONSTRAINT fk_cpa_material
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND CONSTRAINT_NAME = 'fk_cpa_material'
+  ) THEN
+    ALTER TABLE city_palette_assets
+      ADD CONSTRAINT fk_cpa_material FOREIGN KEY (material_id) REFERENCES city_materials(id) ON DELETE SET NULL;
+  END IF;
 
--- 3. Drop inline texture columns (now managed in city_materials)
-ALTER TABLE city_palette_assets DROP COLUMN texture_albedo;
-ALTER TABLE city_palette_assets DROP COLUMN texture_normal;
-ALTER TABLE city_palette_assets DROP COLUMN texture_roughness_metalness;
-ALTER TABLE city_palette_assets DROP COLUMN texture_ao;
-ALTER TABLE city_palette_assets DROP COLUMN texture_emissive;
-ALTER TABLE city_palette_assets DROP COLUMN roughness;
-ALTER TABLE city_palette_assets DROP COLUMN metalness;
+  -- DROP inline texture columns (apenas se ainda existirem)
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'texture_albedo') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN texture_albedo;
+  END IF;
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'texture_normal') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN texture_normal;
+  END IF;
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'texture_roughness_metalness') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN texture_roughness_metalness;
+  END IF;
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'texture_ao') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN texture_ao;
+  END IF;
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'texture_emissive') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN texture_emissive;
+  END IF;
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'roughness') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN roughness;
+  END IF;
+  IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_palette_assets' AND COLUMN_NAME = 'metalness') THEN
+    ALTER TABLE city_palette_assets DROP COLUMN metalness;
+  END IF;
+END;
+CALL migration_009_alter_assets();
+DROP PROCEDURE IF EXISTS migration_009_alter_assets;
 
 INSERT IGNORE INTO migrations (filename, applied_at, status)
 VALUES ('009-city-materials.sql', NOW(), 'applied');

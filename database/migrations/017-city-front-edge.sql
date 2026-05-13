@@ -9,8 +9,18 @@
 -- encontrado na ordem de prioridade N > E > S > W. Cidades isoladas ficam com 0.
 -- ─────────────────────────────────────────────────────────────────────────────
 
-ALTER TABLE city_meta
-  ADD COLUMN front_edge TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER world_z;
+DROP PROCEDURE IF EXISTS migration_017_add_col;
+CREATE PROCEDURE migration_017_add_col()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'city_meta' AND COLUMN_NAME = 'front_edge'
+  ) THEN
+    ALTER TABLE city_meta ADD COLUMN front_edge TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER world_z;
+  END IF;
+END;
+CALL migration_017_add_col();
+DROP PROCEDURE IF EXISTS migration_017_add_col;
 
 UPDATE city_meta cm
 LEFT JOIN city_meta n_n ON n_n.world_x = cm.world_x     AND n_n.world_z = cm.world_z - 1

@@ -23,20 +23,22 @@ ALTER TABLE marketplace_items
 --    Verificação manual via INFORMATION_SCHEMA antes de alterar
 -- ---------------------------------------------------------------------------
 
-SET @col_exists = (
-  SELECT COUNT(*)
-  FROM INFORMATION_SCHEMA.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE()
-    AND TABLE_NAME   = 'user_profile_customization'
-    AND COLUMN_NAME  = 'active_palette_item_id'
-);
-
--- Usamos um bloco IF no stored procedure equivalente via CASE em SET
--- Para MySQL sem prepared statements: usamos ALTER TABLE condicionado pelo check manual
--- ATENÇÃO: executar apenas se a coluna não existir (runner aplica cada migration uma vez)
-ALTER TABLE user_profile_customization
-  ADD COLUMN active_palette_item_id VARCHAR(36) NULL
-  AFTER active_wallpaper_item_id;
+DROP PROCEDURE IF EXISTS migration_006_add_col;
+CREATE PROCEDURE migration_006_add_col()
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME   = 'user_profile_customization'
+      AND COLUMN_NAME  = 'active_palette_item_id'
+  ) THEN
+    ALTER TABLE user_profile_customization
+      ADD COLUMN active_palette_item_id VARCHAR(36) NULL
+      AFTER active_wallpaper_item_id;
+  END IF;
+END;
+CALL migration_006_add_col();
+DROP PROCEDURE IF EXISTS migration_006_add_col;
 
 -- ---------------------------------------------------------------------------
 -- 3. REGISTRAR MIGRATION

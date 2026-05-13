@@ -77,8 +77,16 @@ async function main() {
       .filter(f => f.endsWith('.sql'))
       .sort();
 
-    log(`Encontradas ${migrations.length} migrations.`);
+    // Buscar migrations já aplicadas
+    const [appliedRows] = await conn.query(`SELECT filename FROM migrations`);
+    const applied = new Set(appliedRows.map(r => r.filename));
+
+    log(`Encontradas ${migrations.length} migrations (${applied.size} já aplicadas).`);
     for (const file of migrations) {
+      if (applied.has(file)) {
+        log(`Pulando (já aplicada): ${file}`);
+        continue;
+      }
       log(`Aplicando migration: ${file}`);
       await runFile(conn, path.join(MIGRATIONS, file));
       ok(`${file} concluída.`);
