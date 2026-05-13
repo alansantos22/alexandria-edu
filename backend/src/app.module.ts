@@ -23,6 +23,13 @@ import { LandModule }         from './modules/land/land.module';
 import { AdminModule }        from './modules/admin/admin.module';
 import { ContentModule }      from './modules/content/content.module';
 import { VoucherModule }      from './modules/vouchers/voucher.module';
+import { CommerceModule }     from './modules/commerce/commerce.module';
+import { CohortModule }       from './modules/cohorts/cohort.module';
+import { EnrollmentModule }   from './modules/enrollments/enrollment.module';
+import { LiveClassModule }    from './modules/live-classes/live-class.module';
+import { NotificationModule } from './modules/notifications/notification.module';
+import { InviteModule }       from './modules/invites/invite.module';
+import { CalendarModule }     from './modules/calendar/calendar.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -51,6 +58,13 @@ import { HealthController } from './common/health/health.controller';
     AdminModule,
     ContentModule,
     VoucherModule,
+    NotificationModule,
+    EnrollmentModule,
+    CohortModule,
+    LiveClassModule,
+    CommerceModule,
+    InviteModule,
+    CalendarModule,
   ],
   controllers: [HealthController],
   providers: [

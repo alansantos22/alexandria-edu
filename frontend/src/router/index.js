@@ -27,6 +27,11 @@ const routes = [
       { path: 'vouchers',    component: () => import('../views/admin/VouchersView.vue') },
       { path: 'auditoria',   component: () => import('../views/admin/AuditoriaView.vue') },
       { path: 'usuarios',    component: () => import('../views/admin/UsuariosView.vue') },
+      { path: 'calendario',  component: () => import('../views/admin/AdminCalendarView.vue') },
+      { path: 'produtos',    component: () => import('../views/admin/AdminProductsView.vue') },
+      { path: 'turmas',      component: () => import('../views/admin/AdminCohortsView.vue') },
+      { path: 'campanhas',   component: () => import('../views/admin/AdminCampaignsView.vue') },
+      { path: 'convites',    component: () => import('../views/admin/AdminInvitesView.vue') },
     ],
   },
   { path: '/forum',        component: Forum, meta: { requiresAuth: true } },
@@ -35,6 +40,16 @@ const routes = [
   { path: '/city',         component: () => import('../views/CityView.vue'),    meta: { requiresAuth: true } },
   { path: '/city/:userId', component: () => import('../views/CityView.vue'),    meta: { requiresAuth: true } },
   { path: '/u/:username',  component: () => import('../views/Profile.vue'),     meta: { requiresAuth: true } },
+
+  // Live classes commerce platform
+  { path: '/calendar',          component: () => import('../views/Calendar.vue'),        meta: { requiresAuth: true } },
+  { path: '/live/:id',          component: () => import('../views/LiveClassRoom.vue'),   meta: { requiresAuth: true } },
+  { path: '/catalog',           component: () => import('../views/CourseCatalog.vue') },
+  { path: '/product/:slug',     component: () => import('../views/ProductDetail.vue') },
+  { path: '/checkout/:productId', component: () => import('../views/CourseCheckout.vue'), meta: { requiresAuth: true } },
+  { path: '/invite/:code',      component: () => import('../views/InviteRedeem.vue'),    meta: { requiresAuth: true } },
+  { path: '/me/enrollments',    component: () => import('../views/MyEnrollments.vue'),   meta: { requiresAuth: true } },
+  { path: '/promo/:slug',       component: () => import('../views/CampaignLanding.vue') },
 ]
 
 const router = createRouter({

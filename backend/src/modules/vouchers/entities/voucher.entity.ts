@@ -6,6 +6,10 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
+export type VoucherKind = 'access' | 'discount';
+export type VoucherScope = 'global' | 'product' | 'cohort' | 'live_class';
+export type VoucherDiscountKind = 'percent' | 'fixed';
+
 @Entity({ name: 'vouchers' })
 export class Voucher {
   @PrimaryGeneratedColumn('uuid')
@@ -17,6 +21,29 @@ export class Voucher {
 
   @Column({ type: 'varchar', length: 120, nullable: true })
   label: string | null;
+
+  @Index('IDX_VOUCHER_KIND')
+  @Column({ type: 'enum', enum: ['access', 'discount'], default: 'access' })
+  kind: VoucherKind;
+
+  @Column({
+    type: 'enum',
+    enum: ['global', 'product', 'cohort', 'live_class'],
+    default: 'global',
+  })
+  scope: VoucherScope;
+
+  @Column({ name: 'scope_id', type: 'varchar', length: 36, nullable: true })
+  scopeId: string | null;
+
+  @Column({ name: 'discount_kind', type: 'enum', enum: ['percent', 'fixed'], nullable: true })
+  discountKind: VoucherDiscountKind | null;
+
+  @Column({ name: 'discount_percent', type: 'decimal', precision: 5, scale: 2, default: 0 })
+  discountPercent: string;
+
+  @Column({ name: 'discount_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  discountAmount: string;
 
   @Column({ name: 'max_uses', type: 'int', default: 1 })
   maxUses: number;
