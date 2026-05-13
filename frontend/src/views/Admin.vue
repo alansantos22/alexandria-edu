@@ -45,6 +45,7 @@ import { useRouter } from 'vue-router'
 import {
   ShieldCheck, Crown, LogOut, Settings,
   Users, Library, ShoppingBag, LayoutDashboard, Box, ShieldAlert, Archive, Ticket,
+  CalendarDays, PackageOpen, GraduationCap, Megaphone, Link2,
 } from 'lucide-vue-next'
 
 const tabs = [
@@ -56,6 +57,11 @@ const tabs = [
   { key: 'vouchers',    label: 'Vouchers',    icon: Ticket },
   { key: 'auditoria',   label: 'Auditoria',   icon: ShieldAlert },
   { key: 'usuarios',    label: 'Usuários',    icon: Users },
+  { key: 'calendario',  label: 'Calendário',  icon: CalendarDays },
+  { key: 'produtos',    label: 'Produtos',    icon: PackageOpen },
+  { key: 'turmas',      label: 'Turmas',      icon: GraduationCap },
+  { key: 'campanhas',   label: 'Campanhas',   icon: Megaphone },
+  { key: 'convites',    label: 'Convites',    icon: Link2 },
 ]
 
 const router = useRouter()
@@ -80,15 +86,13 @@ function logout() {
 
   &__tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: $space-1;
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     border-radius: $radius-lg;
     padding: $space-1;
     margin-bottom: $space-6;
-    overflow-x: auto;
-    scrollbar-width: none;
-    &::-webkit-scrollbar { display: none; }
   }
 
   &__tab {
