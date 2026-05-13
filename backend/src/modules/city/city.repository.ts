@@ -9,6 +9,7 @@ import { CityPaletteItem } from './entities/city-palette-item.entity';
 import { CityBuilding } from './entities/city-building.entity';
 import { UserBuildingUnlock } from './entities/user-building-unlock.entity';
 import { VehicleCatalog }    from './entities/vehicle-catalog.entity';
+import { assignBiome } from './biome.util';
 
 @Injectable()
 export class CityRepository {
@@ -39,12 +40,14 @@ export class CityRepository {
     const seed = randomUUID();
     const worldPos = await this.nextAvailableWorldPosition();
     const frontEdge = await this.deriveFrontEdge(worldPos.x, worldPos.z);
+    const biome = assignBiome(worldPos.x, worldPos.z);
     const meta = this.metaRepo.create({
       userId,
       citySeed: seed,
       worldX: worldPos.x,
       worldZ: worldPos.z,
       frontEdge,
+      biome,
     });
     return this.metaRepo.save(meta);
   }
@@ -284,6 +287,7 @@ export class CityRepository {
         cm.world_x         AS worldX,
         cm.world_z         AS worldZ,
         cm.front_edge      AS frontEdge,
+        cm.biome           AS biome,
         cm.city_level      AS cityLevel,
         cm.total_buildings AS totalBuildings,
         GROUP_CONCAT(
@@ -294,7 +298,7 @@ export class CityRepository {
       FROM city_meta cm
       JOIN users u ON u.id = cm.user_id
       LEFT JOIN land_tiles lt ON lt.city_user_id = cm.user_id
-      GROUP BY cm.user_id, u.username, cm.world_x, cm.world_z, cm.front_edge, cm.city_level, cm.total_buildings
+      GROUP BY cm.user_id, u.username, cm.world_x, cm.world_z, cm.front_edge, cm.biome, cm.city_level, cm.total_buildings
       ORDER BY cm.total_buildings DESC
     `);
 
@@ -362,6 +366,7 @@ export class CityRepository {
   }
 
   /** Pares de cidades adjacentes no grid (worldX±1 ou worldZ±1).
+  /** Pares de cidades adjacentes no grid (worldX±1 ou worldZ±1).
    *  Retorna cada par uma única vez. `axis` 'x' = vizinhança em X (A à esquerda de B),
    *  'z' = vizinhança em Z (A acima de B). */
   async findAdjacencies(): Promise<WorldAdjacency[]> {
@@ -378,6 +383,21 @@ export class CityRepository {
     `);
     return rows.map(r => ({ aUserId: r.aUserId, bUserId: r.bUserId, axis: r.axis }));
   }
+
+  /** Recalcula `biome` de TODAS as cidades cuja coluna esteja com o default 'plains'
+   *  ou divergente do esperado. Idempotente — pode rodar a cada startup. */
+  async backfillBiomes(): Promise<{ updated: number; total: number }> {
+    const metas = await this.metaRepo.find({ select: ['userId', 'worldX', 'worldZ', 'biome'] });
+    let updated = 0;
+    for (const m of metas) {
+      const expected = assignBiome(m.worldX, m.worldZ);
+      if (m.biome !== expected) {
+        await this.metaRepo.update({ userId: m.userId }, { biome: expected });
+        updated++;
+      }
+    }
+    return { updated, total: metas.length };
+  }
 }
 
 export interface WorldAdjacency {
@@ -392,6 +412,7 @@ export interface WorldCityInfo {
   worldX: number;
   worldZ: number;
   frontEdge: number;
+  biome: string;
   cityLevel: number;
   totalBuildings: number;
   landTiles: { x: number; z: number }[];

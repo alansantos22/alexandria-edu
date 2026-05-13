@@ -25,4 +25,5 @@ getPalette:       ()                          => api.get('/city/palette').then(r
 
   // ── World ─────────────────────────────────────────────────
   getWorldMap:      ()                          => api.get('/city/world-map').then(r => r.data),
+  getWorldAdjacencies: ()                       => api.get('/city/world-map/adjacencies').then(r => r.data),
 }

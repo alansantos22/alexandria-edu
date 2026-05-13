@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { CityRepository, WorldCityInfo, WorldAdjacency } from './city.repository';
 import { EconomyService } from '../economy/economy.service';
@@ -17,11 +19,25 @@ import { CityPaletteItem } from './entities/city-palette-item.entity';
 import { CityBuilding } from './entities/city-building.entity';
 
 @Injectable()
-export class CityService {
+export class CityService implements OnModuleInit {
+  private readonly logger = new Logger(CityService.name);
+
   constructor(
     private readonly cityRepository: CityRepository,
     private readonly economyService: EconomyService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      const { updated, total } = await this.cityRepository.backfillBiomes();
+      if (updated > 0) {
+        this.logger.log(`Biome backfill: ${updated}/${total} cidades atualizadas.`);
+      }
+    } catch (e) {
+      // Coluna pode não existir ainda (migration não aplicada) — não bloqueia o boot
+      this.logger.warn(`Biome backfill pulado: ${(e as Error).message}`);
+    }
+  }
 
   // ── City ─────────────────────────────────────────────────
 

@@ -79,13 +79,15 @@ const {
 async function load() {
   state.value = 'loading'
   try {
-    const [citiesData, vehiclesData, catalogData] = await Promise.allSettled([
+    const [citiesData, vehiclesData, catalogData, adjData] = await Promise.allSettled([
       cityService.getWorldMap(),
       api.get('/city/vehicles'),
       api.get('/city/vehicles/catalog'),
+      cityService.getWorldAdjacencies(),
     ])
 
     cities = citiesData.status === 'fulfilled' ? citiesData.value : []
+    const adjacencies = adjData.status === 'fulfilled' ? adjData.value : []
 
     let activeVehicle  = null
     let vehicleCatalog = []
@@ -99,7 +101,7 @@ async function load() {
       vehicleCatalog = catalogData.value.data?.catalog ?? []
     }
 
-    loadWorld(cities, { activeVehicle, vehicleCatalog })
+    await loadWorld(cities, { activeVehicle, vehicleCatalog, adjacencies })
     state.value = 'ready'
 
     ;(function poll() {

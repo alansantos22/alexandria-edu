@@ -31,6 +31,10 @@ export class CityMeta {
   @Column({ name: 'front_edge', type: 'tinyint', unsigned: true, default: 0 })
   frontEdge: number;
 
+  /** Bioma atribuído deterministicamente via biome.util.assignBiome. */
+  @Column({ name: 'biome', type: 'varchar', length: 32, default: 'plains' })
+  biome: string;
+
   @Column({ name: 'city_level', type: 'tinyint', unsigned: true, default: 1 })
   cityLevel: number;
 

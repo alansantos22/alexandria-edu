@@ -100,6 +100,12 @@ export class CityController {
     return this.cityService.getWorldMap();
   }
 
+  @Get('world-map/adjacencies')
+  @Public()
+  getWorldAdjacencies() {
+    return this.cityService.getWorldAdjacencies();
+  }
+
   // ── Public city view ─────────────────────────────────────
 
   @Get(':userId')
