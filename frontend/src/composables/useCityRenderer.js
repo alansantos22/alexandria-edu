@@ -15,8 +15,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const CHUNK_SIZE = 16
 const CELL       = 1.4   // world units per grid cell
-export const GRID_EXTENT    = 50              // max cells across all possible tiles
-export const CELLS_PER_TILE = 10             // build grid cells per land tile (tile 0–4 → cells 0–49)
+export const GRID_EXTENT    = 150             // max cells across all possible tiles
+export const CELLS_PER_TILE = 10             // build grid cells per land tile (tile 0–14 → cells 0–149)
 
 // Procedural chunk type → [heightY, hex color]
 const BUILDING_DEFS = {

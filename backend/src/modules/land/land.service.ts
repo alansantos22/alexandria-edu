@@ -60,7 +60,7 @@ export class LandService {
 
   async purchaseTile(userId: string, tileX: number, tileZ: number): Promise<PurchaseResultDto> {
     if (!isValidTile(tileX, tileZ)) {
-      throw new BadRequestException('Tile fora dos limites do grid (0–4).')
+      throw new BadRequestException('Tile fora dos limites do grid (0–14).')
     }
 
     const meta = await this.cityMetaRepo.findOne({ where: { userId } })
